@@ -1,0 +1,22 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - bitrix.m8.team
+  resources:
+  - bitrixclusters
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - bitrix.m8.team
+  resources:
+  - bitrixclusters/status
+  verbs:
+  - get
+  - patch
+  - update

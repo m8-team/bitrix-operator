@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- bitrix_v1alpha1_bitrixcluster.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

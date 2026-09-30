@@ -1,0 +1,67 @@
+# Schema example only: iteration 1 does not create application workloads.
+# Create the referenced Secrets separately before runtime support is implemented.
+apiVersion: bitrix.m8.team/v1alpha1
+kind: BitrixCluster
+metadata:
+  name: example
+spec:
+  release:
+    image:
+      repository: registry.example.com/bitrix/portal
+      tag: "2026.09.1"
+  license:
+    secretRef:
+      name: bitrix-license
+      key: license
+  crypto:
+    secretRef:
+      name: bitrix-crypto
+      key: key
+  sites:
+    - id: s1
+      hosts:
+        - portal.example.com
+      # tls is deliberately omitted: internal HTTP does not need a certificate.
+  runtime:
+    web:
+      nginx:
+        image: quay.io/bitrix24/nginx:1.30.5-v1-alpine
+      php:
+        image: quay.io/bitrix24/php:8.2.34-fpm-v1-alpine
+    cron:
+      enabled: false
+  database:
+    engine: MySQL
+    connections:
+      - name: default
+        host: mysql.database.svc.cluster.local
+        port: 3306
+        database: bitrix
+        username: bitrix
+        passwordSecretRef:
+          name: bitrix-database
+          key: password
+  redis:
+    host: redis.cache.svc.cluster.local
+    port: 6379
+    passwordSecretRef:
+      name: bitrix-redis
+      key: password
+    cache:
+      sid: example
+    sessions:
+      mode: default
+      ttl: 1440
+  storage:
+    uploads:
+      type: PersistentVolumeClaim
+      mountPath: /opt/www/upload
+      persistentVolumeClaim:
+        storageClassName: shared-rwx
+        accessModes:
+          - ReadWriteMany
+        size: 20Gi
+    temporary:
+      type: EmptyDir
+      mountPath: /opt/.bx_temp
+      sizeLimit: 1Gi

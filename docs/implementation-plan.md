@@ -1,6 +1,6 @@
 # План разработки Bitrix Operator
 
-Дата проверки источников: 2026-09-29. Статус: итерация 0 — планирование.
+Дата проверки источников: 2026-09-29. Статус: итерация 1 — API foundation; см. docs/foundation.md.
 Репозиторий: https://github.com/m8-team/bitrix-operator
 Go module: github.com/m8-team/bitrix-operator
 
@@ -8,7 +8,7 @@ Go module: github.com/m8-team/bitrix-operator
 
 Оператор управляет коробочным корпоративным порталом и сайтами Bitrix в Kubernetes.
 Единственный пользовательский API — предоставленный BitrixCluster v1alpha1.
-Исходный файл хранится без изменений в docs/reference/bitrixcluster_types.go.
+Исходный файл хранится без изменений в docs/reference/bitrixcluster_types.go.txt.
 Новые поля и дополнительные пользовательские CRD в рамках этого плана не вводятся.
 
 Go-файл содержит API types и kubebuilder markers, но не готовый установленный CRD:
@@ -241,7 +241,7 @@ Redis example содержит protected-mode no, appendonly no и allkeys-lru.
 Дальнейшие ветки: feat/01-foundation, feat/02-runtime-contract и т.д.
 Без force push и автоматического merge незавершенных итераций.
 
-### 0. План и baseline — текущая итерация
+### 0. План и baseline — завершено
 
 - [x] Прочитать весь предоставленный API.
 - [x] Проверить состояние репозитория и доступ.
@@ -251,16 +251,16 @@ Redis example содержит protected-mode no, appendonly no и allkeys-lru.
 
 Результат: reviewable план; работающий controller еще не заявляется.
 
-### 1. Foundation: Kubebuilder и API
+### 1. Foundation: Kubebuilder и API — реализовано в feat/01-foundation
 
-- Создать проект настоящим Kubebuilder CLI, проверить checksum бинарника.
-- Зафиксировать versions, PROJECT, Go module, license, стандартный Makefile.
-- Перенести исходный API в api/v1alpha1 без изменения spec/status и JSON names.
-- Сгенерировать deepcopy, CRD, RBAC и начальный controller.
-- Проверить CEL/defaults на реальном envtest API server, включая optional TLS,
+- [x] Создать проект настоящим Kubebuilder CLI, проверить checksum бинарника.
+- [x] Зафиксировать versions, PROJECT, Go module, license, стандартный Makefile.
+- [x] Перенести исходный API в api/v1alpha1 без изменения spec/status и JSON names.
+- [x] Сгенерировать deepcopy, CRD, RBAC и начальный controller.
+- [x] Проверить CEL/defaults на реальном envtest API server, включая optional TLS,
   имя default connection, optional objects, omitzero и duration.
-- CI: gofmt, vet, lint, unit/envtest, generated-file drift.
-- Зафиксировать Kubernetes test matrix и version provenance.
+- [x] CI: gofmt, vet, lint, unit/envtest, generated-file drift.
+- [x] Зафиксировать Kubernetes test matrix и version provenance.
 
 Готовность: build/test проходят; CRD устанавливается; HTTP sample без TLS принимается;
 неверные enum/required/CEL отклоняются; повторная генерация не дает diff.
