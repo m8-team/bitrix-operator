@@ -85,6 +85,18 @@ var _ = Describe("Web and storage reconciliation", func() {
 		Expect(uploads(c).UID).To(Equal(p.UID))
 	})
 
+	It("repairs managed field drift while preserving unrelated metadata", func() {
+		c := reconcileWeb(webSample())
+		d := webDeployment(c)
+		d.Annotations = map[string]string{"example.com/note": "preserve"}
+		d.Spec.Template.Spec.Containers[0].Image = "example.com/changed:tag"
+		Expect(k8sClient.Update(ctx, d, client.FieldOwner("external-editor"))).To(Succeed())
+		reconcileWeb(c)
+		d = webDeployment(c)
+		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(c.Spec.Runtime.Web.Nginx.Image))
+		Expect(d.Annotations["example.com/note"]).To(Equal("preserve"))
+	})
+
 	It("requires current rollout counters and bound storage and preserves condition transition times", func() {
 		c := reconcileWeb(webSample())
 		d := webDeployment(c)

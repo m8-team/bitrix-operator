@@ -13,6 +13,10 @@ spec["database"]["engine"] = engine
 connection = spec["database"]["connections"][0]
 connection["host"] = "dependencies.bitrix-dependencies-test.svc.cluster.local"
 connection["port"] = 3306 if engine == "MySQL" else 5432
+connection["options"] = {
+    "charset": "utf8mb4" if engine == "MySQL" else "UTF8",
+    "timezone": "+00:00" if engine == "MySQL" else "UTC",
+}
 spec["redis"]["host"] = connection["host"]
 spec["storage"]["uploads"]["persistentVolumeClaim"] = {
     "storageClassName": "standard", "accessModes": ["ReadWriteOnce"], "size": "128Mi"

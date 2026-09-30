@@ -181,7 +181,7 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.
 		c.Status.Release = &bx.ReleaseStatus{Repository: c.Spec.Release.Image.Repository, Tag: c.Spec.Release.Image.Tag, Digest: c.Spec.Release.Image.Digest}
 	}
 	for _, status := range d.Conditions {
-		if status.Type == appsv1.DeploymentProgressing && status.Status == corev1.ConditionFalse && status.Reason == "ProgressDeadlineExceeded" {
+		if d.ObservedGeneration >= deployment.Generation && status.Type == appsv1.DeploymentProgressing && status.Status == corev1.ConditionFalse && status.Reason == "ProgressDeadlineExceeded" {
 			return block("ProgressDeadlineExceeded", "The web Deployment exceeded its rollout deadline")
 		}
 	}
