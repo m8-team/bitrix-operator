@@ -98,6 +98,33 @@ func testNginxContainer(t *testing.T) {
 	dir := writeFiles(t, b.Nginx)
 	args := append(containerArgs(), "-v", dir+":/run/nginx:ro", "--entrypoint=nginx", nginxImage, "-t", "-c", "/run/nginx/nginx.conf")
 	docker(t, args...)
+	// Exercise nginx location precedence: syntax checks alone cannot catch PHP source disclosure.
+	root := writeFiles(t, map[string]string{"index.html": "public fixture", ".env": "private fixture", "source.PHP": "private fixture", "source.php.jpg": "private fixture"})
+	for _, name := range []string{"bitrix", "upload"} {
+		if err := os.Mkdir(filepath.Join(root, name), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"bitrix/license_key.php", "bitrix/.settings.php", "upload/evil.php", "upload/evil.PHP", "upload/evil.phtml"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("private fixture"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	args = append(containerArgs(), "-v", dir+":/run/nginx:ro", "-v", root+":"+Root+":ro", "--entrypoint=sh", nginxImage, "-ec", `
+nginx -c /run/nginx/nginx.conf
+trap 'nginx -c /run/nginx/nginx.conf -s quit' EXIT
+wget -q -O /tmp/body --header='Host: portal.example.com' http://127.0.0.1:8080/index.html
+grep -q 'public fixture' /tmp/body
+for uri in /.env /source.PHP /source.php.jpg /bitrix/license_key.php /bitrix/.settings.php /upload/evil.php /upload/evil.PHP /upload/evil.phtml; do
+ if wget -S -O /tmp/body --header='Host: portal.example.com' "http://127.0.0.1:8080$uri" 2>/tmp/headers; then exit 1; fi
+ grep -q '403 Forbidden' /tmp/headers
+done
+if wget -q -O /tmp/body --header='Host: unknown.example.com' http://127.0.0.1:8080/index.html; then exit 1; fi
+echo 'nginx routing OK'
+`)
+	if !strings.Contains(docker(t, args...), "nginx routing OK") {
+		t.Fatal("missing nginx routing result")
+	}
 }
 
 const phpCheck = `<?php

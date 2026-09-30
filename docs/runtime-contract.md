@@ -21,7 +21,8 @@ OCI index digests получены из Quay 30 сентября 2026; оба и
 Версия PHP выбрана по baseline env-docker, а не по принципу максимального номера:
 совместимость приложения важнее. Новые версии добавляются после тех же проверок.
 CI проверяет `php -l`, `php-fpm -t`, `nginx -t`, наличие mysqli/pgsql/redis/mbstring/
-xml/gd/zip/intl и исполнение настроек с кавычками, переводами строк и PHP-текстом
+xml/gd/zip/intl HTTP-проверку запрета служебных файлов и PHP в uploads,
+и исполнение настроек с кавычками, переводами строк и PHP-текстом
 в синтетических Secrets. Контейнеры работают под UID/GID 979, с read-only rootfs,
 без capabilities, без сети и с `no-new-privileges`.
 

@@ -18,6 +18,9 @@ http {
  server_tokens off;
  client_body_temp_path /tmp/client-body;
  fastcgi_temp_path /tmp/fastcgi;
+ proxy_temp_path /tmp/proxy;
+ uwsgi_temp_path /tmp/uwsgi;
+ scgi_temp_path /tmp/scgi;
  client_max_body_size 1024m;
  sendfile on;
  server { listen 8080 default_server; server_name _; return 444; }
