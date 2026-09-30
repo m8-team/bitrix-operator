@@ -3,7 +3,6 @@ package runtime
 
 import (
 	"crypto/sha256"
-	"embed"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -28,9 +27,6 @@ const (
 	SecretRoot = "/run/bitrix-secrets"
 )
 
-//go:embed assets/*
-var assets embed.FS
-
 // Bundle contains no secret values. Keep PHP configuration separate from nginx mounts.
 type Bundle struct {
 	Nginx   map[string]string
@@ -42,13 +38,30 @@ type Bundle struct {
 type manifest struct {
 	Version     string                    `json:"version"`
 	Engine      bitrixv1.DatabaseEngine   `json:"engine"`
-	Connections map[string]map[string]any `json:"connections"`
-	Redis       map[string]any            `json:"redis"`
+	Connections map[string]connectionData `json:"connections"`
+	Redis       redisData                 `json:"redis"`
 	SessionMode string                    `json:"sessionMode"`
 	SessionTTL  int64                     `json:"sessionTTL"`
 	CacheSID    string                    `json:"cacheSID"`
 	License     string                    `json:"license"`
 	Crypto      string                    `json:"crypto"`
+}
+
+// Field order preserves the manifest JSON emitted before the template migration.
+type connectionData struct {
+	ClassName    string `json:"className"`
+	Database     string `json:"database"`
+	Host         string `json:"host"`
+	InitCommand  string `json:"initCommand"`
+	Login        string `json:"login"`
+	Options      int    `json:"options"`
+	PasswordFile string `json:"passwordFile"`
+}
+
+type redisData struct {
+	Host         string `json:"host"`
+	PasswordFile string `json:"passwordFile"`
+	Port         int32  `json:"port"`
 }
 
 // Render validates the runtime subset of an already API-validated spec and produces deterministic files.
@@ -59,7 +72,7 @@ func Render(spec bitrixv1.BitrixClusterSpec) (*Bundle, error) {
 	}
 	refs := newSecretSet()
 	m := manifest{Version: ContractVersion, Engine: spec.Database.Engine,
-		Connections: map[string]map[string]any{}, SessionMode: spec.Redis.Sessions.Mode,
+		Connections: map[string]connectionData{}, SessionMode: spec.Redis.Sessions.Mode,
 		SessionTTL: spec.Redis.Sessions.TTL, CacheSID: spec.Redis.Cache.SID}
 	if m.License, err = refs.add(spec.License.SecretRef); err != nil {
 		return nil, err
@@ -71,7 +84,7 @@ func Render(spec bitrixv1.BitrixClusterSpec) (*Bundle, error) {
 	if err != nil {
 		return nil, err
 	}
-	m.Redis = map[string]any{"host": spec.Redis.Host, "port": spec.Redis.Port, "passwordFile": password}
+	m.Redis = redisData{Host: spec.Redis.Host, Port: spec.Redis.Port, PasswordFile: password}
 	for _, c := range spec.Database.Connections {
 		password, err = refs.add(c.PasswordSecretRef)
 		if err != nil {
@@ -81,28 +94,21 @@ func Render(spec bitrixv1.BitrixClusterSpec) (*Bundle, error) {
 		if spec.Database.Engine == bitrixv1.DatabaseEnginePostgreSQL {
 			class = "\\Bitrix\\Main\\DB\\PgsqlConnection"
 		}
-		m.Connections[c.Name] = map[string]any{"className": class,
-			"host": c.Host + ":" + strconv.Itoa(int(c.Port)), "database": c.Database, "login": c.Username,
-			"passwordFile": password, "options": 2, "initCommand": initCommand(spec.Database.Engine, c.Options)}
+		m.Connections[c.Name] = connectionData{ClassName: class,
+			Host: c.Host + ":" + strconv.Itoa(int(c.Port)), Database: c.Database, Login: c.Username,
+			PasswordFile: password, Options: 2, InitCommand: initCommand(spec.Database.Engine, c.Options)}
 	}
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode runtime manifest: %w", err)
 	}
-	b := &Bundle{Nginx: map[string]string{"nginx.conf": nginx(hosts, spec.Storage.Uploads.MountPath)},
-		PHP:     map[string]string{"manifest.json": string(data), "php.ini": phpINI(spec.Storage.Temporary.MountPath), "php-fpm.conf": fpm},
-		Secrets: refs.projections()}
-	entries, err := assets.ReadDir("assets")
+	nginx, php, err := renderConfigs(configData{Hosts: hosts,
+		UploadsPath: spec.Storage.Uploads.MountPath, TemporaryPath: spec.Storage.Temporary.MountPath})
 	if err != nil {
 		return nil, err
 	}
-	for _, entry := range entries {
-		content, readErr := assets.ReadFile("assets/" + entry.Name())
-		if readErr != nil {
-			return nil, readErr
-		}
-		b.PHP[entry.Name()] = string(content)
-	}
+	php["manifest.json"] = string(data)
+	b := &Bundle{Nginx: nginx, PHP: php, Secrets: refs.projections()}
 	// JSON sorts map keys; projections are explicitly sorted. No secret bytes enter this hash.
 	encoded, err := json.Marshal(b)
 	if err != nil {

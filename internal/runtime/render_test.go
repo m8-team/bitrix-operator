@@ -52,7 +52,7 @@ func TestRenderDeterministicAndPrivate(t *testing.T) {
 	if err = json.Unmarshal([]byte(a.PHP["manifest.json"]), &m); err != nil {
 		t.Fatal(err)
 	}
-	if m.Connections["analytics"]["database"] != before.Database.Connections[1].Database {
+	if m.Connections["analytics"].Database != before.Database.Connections[1].Database {
 		t.Fatal("JSON changed literal database name")
 	}
 	for _, projection := range a.Secrets {
@@ -109,7 +109,7 @@ func TestConnectionOptions(t *testing.T) {
 			if err = json.Unmarshal([]byte(b.PHP["manifest.json"]), &m); err != nil {
 				t.Fatal(err)
 			}
-			command := m.Connections["default"]["initCommand"].(string)
+			command := m.Connections["default"].InitCommand
 			if !strings.Contains(command, "utf8") || !strings.Contains(command, "Europe/Moscow") {
 				t.Fatal("connection options lost")
 			}

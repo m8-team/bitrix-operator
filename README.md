@@ -2,7 +2,7 @@
 
 Kubernetes operator для коробочного портала и сайтов Bitrix.
 
-**Итерация 2: runtime contract и конфигурации.** Подготовлены renderer nginx/PHP/Bitrix,
+**Итерация 2.1: runtime contract и файловые шаблоны.** Подготовлены renderer nginx/PHP/Bitrix,
 Secret projections и проверки runtime-образов; [контракт](docs/runtime-contract.md).
 Manager наблюдает `BitrixCluster` и выставляет
 `Pending`, `Ready=False`, reason `RuntimeNotImplemented`. Web, cron, Push & Pull,
@@ -87,3 +87,6 @@ CI: форматирование, Go modules, build/vet/lint, API contract, envt
 Добавлены renderer nginx/PHP/Bitrix, PHP-only Secret projections, подготовка
 release image и Docker-проверки конфигураций. Подробности и ограничения —
 [docs/runtime-contract.md](docs/runtime-contract.md). Workloads пока не создаются.
+
+Конфигурации компонентов находятся в [internal/runtime/templates](internal/runtime/templates/README.md).
+Go выполняет подстановку проверенных параметров; нативные PHP-файлы копируются без обработки.
