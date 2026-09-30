@@ -5,8 +5,9 @@
 !test/fixtures/runtime/**
 !internal/
 !internal/runtime/
-!internal/runtime/assets/
-!internal/runtime/assets/**
+!internal/runtime/templates/
+!internal/runtime/templates/bitrix/
+!internal/runtime/templates/bitrix/**
 !hack/
 !hack/runtime/
 !hack/runtime/prepare-release.sh

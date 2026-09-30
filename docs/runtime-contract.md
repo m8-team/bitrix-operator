@@ -5,6 +5,22 @@
 `Ready=False / RuntimeNotImplemented`: Deployment, PVC и validation Job появляются
 в следующих итерациях. API и RBAC не изменены.
 
+## Родные файловые шаблоны — итерация 2.1
+
+Конфигурации хранятся в `internal/runtime/templates/`: nginx — `.conf.tmpl`,
+PHP — `.ini.tmpl`, PHP-FPM — статический `.conf`, Bitrix — статические `.php`.
+Только `.tmpl` проходит через `text/template` с `missingkey=error`; остальные
+файлы копируются побайтно. Go подготавливает типизированные данные, проверяет
+параметры и применяет helpers для целевого формата. Значения Secrets остаются
+в файлах runtime, а `manifest.json` передаёт PHP только данные и ссылки на них.
+
+Полные конфигурации удалены из Go-строк. Golden tests фиксируют совпадение всех
+выходных файлов и hash Bundle с предыдущим renderer, включая custom hosts/paths;
+перенос сам по себе не меняет rollout hash. Build script также копирует родные
+PHP placeholders вместо сборки PHP через shell. Структура, upstream provenance,
+экранирование и добавление нового шаблона описаны в
+[templates/README.md](../internal/runtime/templates/README.md).
+
 ## Образы и проверяемая совместимость
 
 Источником структуры каталогов, PHP extensions и примеров служит
@@ -58,10 +74,10 @@ nginx и PHP используют одну копию. Доступ к коду 
 FROM quay.io/bitrix24/php:8.2.34-fpm-v1-alpine@sha256:58aa3acaaf6da1f38c2297abade120780be02afad99656f97c444fa3207ab440
 USER root
 COPY app/ /opt/www/
-COPY internal/runtime/assets/ /tmp/operator-assets/
+COPY internal/runtime/templates/bitrix/ /tmp/operator-templates/
 COPY hack/runtime/prepare-release.sh /tmp/prepare-release.sh
-RUN sh /tmp/prepare-release.sh /opt/www /tmp/operator-assets \
-    && rm -rf /tmp/operator-assets /tmp/prepare-release.sh \
+RUN sh /tmp/prepare-release.sh /opt/www /tmp/operator-templates \
+    && rm -rf /tmp/operator-templates /tmp/prepare-release.sh \
     && chmod -R a+rX /opt/www
 LABEL team.m8.bitrix-operator.runtime-contract="v1"
 USER 979:979

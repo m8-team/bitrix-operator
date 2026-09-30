@@ -56,6 +56,14 @@ Always use `kubebuilder create api` and `kubebuilder create webhook` to scaffold
 The e2e tests are designed to validate the solution in an isolated environment (similar to GitHub Actions CI).
 Ensure you run them against a dedicated [Kind](https://kind.sigs.k8s.io/) cluster (not your “real” dev/prod cluster).
 
+## Runtime Configuration Files
+
+- Keep component configs in `internal/runtime/templates/` in their native formats.
+- Use `.tmpl` only for parameterized files; copy static PHP/config files unchanged.
+- Do not reintroduce complete configs in Go string literals or shell generation.
+- Keep Secret values outside templates; preserve format-specific validation and native-tool tests.
+- Follow `internal/runtime/templates/README.md` when adding or changing a config.
+
 ## After Making Changes
 
 **After editing `*_types.go` or markers:**

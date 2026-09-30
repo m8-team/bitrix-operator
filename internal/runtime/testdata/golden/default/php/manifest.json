@@ -1,0 +1,25 @@
+{
+  "version": "v1",
+  "engine": "MySQL",
+  "connections": {
+    "default": {
+      "className": "\\Bitrix\\Main\\DB\\MysqliConnection",
+      "database": "bitrix",
+      "host": "mysql.database.svc.cluster.local:3306",
+      "initCommand": "",
+      "login": "bitrix",
+      "options": 2,
+      "passwordFile": "/run/bitrix-secrets/67580d6730ddded58147b9d8d1580ba1ba86cf4ea60dd050e18c2e21850a4112"
+    }
+  },
+  "redis": {
+    "host": "redis.cache.svc.cluster.local",
+    "passwordFile": "/run/bitrix-secrets/c2ba6bf5f4f5255d2d954a6a60feba9f1aeb650502a80ef133e06e4acf113613",
+    "port": 6379
+  },
+  "sessionMode": "default",
+  "sessionTTL": 1440,
+  "cacheSID": "example",
+  "license": "/run/bitrix-secrets/4223132e8b9418a8b84ed207c37b900786a40c3a819d2aa01a18b258c0ab27b4",
+  "crypto": "/run/bitrix-secrets/9d2b18487d22b667627efb8782f11b6b76902f1ebe7fa8aa3d351d48fe30922a"
+}

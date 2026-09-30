@@ -14,4 +14,4 @@
 !go.sum
 
 # Embedded runtime helpers are part of the Go source package.
-!internal/runtime/assets/**
+!internal/runtime/templates/**
