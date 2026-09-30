@@ -2,7 +2,8 @@
 
 Дата проверки источников: 2026-09-30. Статус: итерация 2 — runtime contract и renderer;
 см. docs/runtime-contract.md. Foundation объединён в main (PR #1). Следующий этап —
-итерация 3, Kubernetes workloads и storage.
+доработка 2.1, шаблоны конфигураций в родных форматах; затем итерация 3,
+Kubernetes workloads и storage.
 Репозиторий: https://github.com/m8-team/bitrix-operator
 Go module: github.com/m8-team/bitrix-operator
 
@@ -99,6 +100,22 @@ Generation predicate не должен отбрасывать обновлени
 Повторные status patches выполняются только при изменении; transition time сохраняется.
 Transient errors используют backoff, ожидания — RequeueAfter; неверная конфигурация
 отражается Condition с понятным reason без бесконечного горячего цикла.
+
+### Шаблоны конфигураций
+
+Конфигурации nginx, PHP-FPM, PHP, Bitrix и других runtime-компонентов хранятся
+отдельными файлами в родных форматах (`.conf`, `.ini`, `.php`, `.json`, `.env`
+по требованиям компонента), по примеру структуры env-docker. Шаблонизация
+добавляет только необходимые параметры и условные блоки. Go отвечает за
+типизированные данные из CR, валидацию, безопасную подстановку, загрузку шаблонов
+через `go:embed` и формирование Kubernetes-ресурсов. Полные конфигурации нельзя
+хранить в Go string literals или собирать конкатенацией/`fmt.Sprintf`.
+
+Структуру и директивы сверяем с закреплённой версией env-docker; адаптации для
+Kubernetes документируем рядом с шаблонами. Секретные значения остаются в Secret
+files: в шаблонах допустимы только ссылки и PHP-код их чтения. Существующий JSON
+manifest может остаться транспортом типизированных данных, но не заменяет
+читаемые конфигурации компонентов. Конкретные задачи переноса — в доработке 2.1.
 
 ### Release image и файловая система
 
@@ -270,7 +287,8 @@ Redis example содержит protected-mode no, appendonly no и allkeys-lru.
 ### 2. Runtime contract и конфигурации Bitrix
 
 - Зафиксировать release-image contract и совместимые runtime images/digests.
-- Реализовать renderer nginx, PHP-FPM, Bitrix connections/cache/sessions/license/crypto.
+- Реализовать renderer на базе файлов-шаблонов родных форматов для nginx,
+  PHP-FPM, PHP и Bitrix connections/cache/sessions/license/crypto.
 - Проверить чтение Secret files и безопасное экранирование PHP/nginx values.
 - Подготовить контролируемый test fixture image и пользовательский image build guide.
 - Определить проверку site IDs через Bitrix API внутри PHP runtime:
@@ -282,8 +300,42 @@ Redis example содержит protected-mode no, appendonly no и allkeys-lru.
 Готовность: nginx -t, php -l, конфигурационные tests; сложные пароли не ломают
 синтаксис и не попадают в публичные объекты; существующие settings не теряются.
 
+### 2.1. Перенос runtime-конфигураций в файловые шаблоны
+
+Добавлено по решению от 2026-09-30. Задачи открыты; выполнить до подключения
+renderer к workloads итерации 3. Текущие nginx/FPM/INI в Go-строках — промежуточная
+реализация, требующая переноса.
+
+- [ ] Организовать `internal/runtime/templates/` по компонентам: nginx, php,
+  bitrix; для cron, Push и других компонентов добавлять шаблоны при их реализации.
+  Сохранять узнаваемые имена и структуру родных файлов; `.tmpl` использовать только
+  там, где нужна подстановка. Статические файлы включать без шаблонизации.
+- [ ] Перенести `nginx.conf`, PHP-FPM pool/global config и `php.ini` из
+  `internal/runtime/config.go` в `.conf`/`.ini` templates. Разделять include-файлы
+  там, где это делает конфигурацию компонента удобнее для чтения и сопровождения.
+- [ ] Привести Bitrix settings, license/crypto helpers и связанные конфигурации
+  к тому же подходу с родными `.php` файлами. Сохранить текущие PHP assets,
+  которые уже соответствуют правилу, и поведение overlay пользовательских settings.
+- [ ] Ограничить Go-renderer подготовкой данных и выполнением файловых шаблонов;
+  убрать полные конфигурации из Go-кода. Обеспечить ошибку при отсутствии обязательных
+  параметров, детерминированный результат и экранирование для каждого целевого
+  формата. Сохранить нативные переменные nginx (`$uri` и другие) и PHP без случайной
+  подстановки. Не использовать shell/envsubst для подстановки secret values.
+- [ ] Зафиксировать соответствие шаблонов upstream-файлам env-docker, revision
+  источника и осознанные отличия для Kubernetes. Обновить embed/build context,
+  fixture и инструкцию добавления нового шаблона.
+- [ ] Добавить golden-тесты результата рендеринга и проверки специальных символов,
+  отсутствующих параметров и порядка входных данных. Сохранить реальные
+  `nginx -t`, `php-fpm -t`, `php -l`, HTTP security tests и PHP semantic tests.
+
+Готовность: конфигурации читаются и редактируются в родных форматах; полных
+nginx/FPM/INI/PHP конфигураций в Go-строках нет; тесты подтверждают эквивалентность
+поведения, сохранение custom settings и отсутствие secret values в публичных
+артефактах. CRD не меняется. Правило применяется ко всем последующим итерациям.
+
 ### 3. Первый вертикальный срез: web и storage
 
+- Перед началом завершить перенос шаблонов из доработки 2.1.
 - PVC retention, collision handling, безопасный resize.
 - Release init container, web Deployment nginx/PHP, Service, конфигурации.
 - Подключение MySQL/PostgreSQL и Redis, Secret dependency watches.
