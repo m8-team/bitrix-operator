@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # This script owns a new, isolated kind cluster and never uses the caller's kubeconfig.
-set -euo pipefail
+set -Eeuo pipefail
+trap 'echo "Web E2E failed at line $LINENO" >&2' ERR
 cd "$(dirname "$0")/.."
 cluster=bitrix-web-e2e
 if kind get clusters 2>/dev/null | grep -qx "$cluster"; then
@@ -49,12 +50,24 @@ for name in mysql postgresql; do
     response=$(kubectl -n bitrix-web-test exec "deployment/$name-web" -c nginx -- \
         wget -qO- --header='Host: portal.example.com' "http://$name-web/")
     test "$response" = runtime-fixture
-    kubectl -n bitrix-web-test exec "deployment/$name-web" -c php -- sh -c \
-        'test ! -w /opt/www/index.php && echo persisted > /opt/www/upload/persistent.txt && echo cached > /opt/www/bitrix/cache/check.txt'
-    kubectl -n bitrix-web-test exec "deployment/$name-web" -c nginx -- sh -c \
-        'test ! -w /opt/www/upload && test ! -e /run/bitrix-secrets && test ! -e /run/bitrix-config/manifest.json'
+    echo "Checking actual read-only and writable mounts for $name"
+    kubectl -n bitrix-web-test exec "deployment/$name-web" -c php -- sh -ec '
+        if (echo forbidden >> /opt/www/index.php) 2>/dev/null; then
+            echo "Application code is writable" >&2; exit 1
+        fi
+        echo persisted > /opt/www/upload/persistent.txt
+        echo cached > /opt/www/bitrix/cache/check.txt
+    '
+    kubectl -n bitrix-web-test exec "deployment/$name-web" -c nginx -- sh -ec '
+        if (echo forbidden > /opt/www/upload/nginx-denied.txt) 2>/dev/null; then
+            echo "nginx can write uploads" >&2; exit 1
+        fi
+        test ! -e /run/bitrix-secrets
+        test ! -e /run/bitrix-config/manifest.json
+    '
 done
 # Secret rotation must change the template and converge to ready replicas.
+echo "Checking Secret rotation and data persistence"
 old=$(kubectl -n bitrix-web-test get deployment/mysql-web -o jsonpath='{.spec.template.metadata.annotations.bitrix\.m8\.team/secret-revision}')
 kubectl -n bitrix-web-test patch secret bitrix-crypto --type=merge -p '{"stringData":{"key":"rotated-fixture-key"}}'
 for attempt in $(seq 1 60); do
@@ -67,6 +80,7 @@ kubectl -n bitrix-web-test rollout status deployment/mysql-web --timeout=180s
 kubectl -n bitrix-web-test wait bitrixcluster/mysql --for=condition=WebReady --timeout=120s
 test "$(kubectl -n bitrix-web-test exec deployment/mysql-web -c php -- cat /opt/www/upload/persistent.txt)" = persisted
 # Removing a dependency affects readiness, never liveness or process restart counts.
+echo "Checking dependency outage and recovery"
 kubectl -n bitrix-dependencies-test scale deployment/dependencies --replicas=0
 kubectl -n bitrix-web-test wait bitrixcluster/mysql --for=condition=WebReady=False --timeout=120s
 kubectl -n bitrix-web-test get pods -o json | python3 -c \
@@ -75,6 +89,7 @@ kubectl -n bitrix-dependencies-test scale deployment/dependencies --replicas=1
 kubectl -n bitrix-dependencies-test rollout status deployment/dependencies --timeout=240s
 kubectl -n bitrix-web-test wait bitrixcluster/mysql --for=condition=WebReady --timeout=180s
 # Data survives CR deletion; a new CR with the same name cannot adopt it silently.
+echo "Checking retained PVC and refusal to adopt it"
 pvc_uid=$(kubectl -n bitrix-web-test get pvc/mysql-uploads -o jsonpath='{.metadata.uid}')
 kubectl -n bitrix-web-test delete bitrixcluster/mysql
 kubectl -n bitrix-web-test wait deployment/mysql-web --for=delete --timeout=120s
