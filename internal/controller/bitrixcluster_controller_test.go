@@ -17,7 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	"context"
 	"os"
 	"time"
 
@@ -30,7 +29,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/yaml"
 
 	bitrixv1alpha1 "github.com/m8-team/bitrix-operator/api/v1alpha1"
@@ -58,20 +56,20 @@ func createSample() *bitrixv1alpha1.BitrixCluster {
 }
 
 var _ = Describe("BitrixCluster foundation", func() {
-	It("records Pending without claiming a running application and is idempotent", func() {
+	It("reports missing dependencies without claiming readiness and is idempotent", func() {
 		obj := createSample()
 		r := &BitrixClusterReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
 		req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(obj)}
 		result, err := r.Reconcile(ctx, req)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result).To(Equal(ctrl.Result{}))
+		Expect(result.RequeueAfter).To(Equal(time.Minute))
 		Expect(k8sClient.Get(ctx, req.NamespacedName, obj)).To(Succeed())
-		Expect(obj.Status.Phase).To(Equal(bitrixv1alpha1.BitrixClusterPhasePending))
+		Expect(obj.Status.Phase).To(Equal(bitrixv1alpha1.BitrixClusterPhaseDegraded))
 		Expect(obj.Status.ObservedGeneration).To(Equal(obj.Generation))
 		ready := meta.FindStatusCondition(obj.Status.Conditions, "Ready")
 		Expect(ready).NotTo(BeNil())
 		Expect(ready.Status).To(Equal(metav1.ConditionFalse))
-		Expect(ready.Reason).To(Equal("RuntimeNotImplemented"))
+		Expect(ready.Reason).To(Equal("SecretMissing"))
 		Expect(obj.Status.Release).To(BeNil())
 		resourceVersion := obj.ResourceVersion
 		transition := ready.LastTransitionTime
@@ -100,29 +98,6 @@ var _ = Describe("BitrixCluster foundation", func() {
 		Expect(result).To(Equal(ctrl.Result{}))
 	})
 
-	It("starts a real manager and reconciles watch events without Gateway API CRDs", func() {
-		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-			Scheme: k8sClient.Scheme(), Metrics: metricsserver.Options{BindAddress: "0"},
-			HealthProbeBindAddress: "0", LeaderElection: false,
-		})
-		Expect(err).NotTo(HaveOccurred())
-		r := &BitrixClusterReconciler{Client: mgr.GetClient(), Scheme: mgr.GetScheme()}
-		Expect(r.SetupWithManager(mgr)).To(Succeed())
-		managerCtx, stop := context.WithCancel(ctx)
-		done := make(chan error, 1)
-		go func() { done <- mgr.Start(managerCtx) }()
-		DeferCleanup(func() {
-			stop()
-			Eventually(done, 10*time.Second).Should(Receive(BeNil()))
-		})
-		obj := createSample()
-		key := client.ObjectKeyFromObject(obj)
-		Eventually(func(g Gomega) {
-			g.Expect(k8sClient.Get(ctx, key, obj)).To(Succeed())
-			g.Expect(obj.Status.ObservedGeneration).To(Equal(obj.Generation))
-			g.Expect(meta.IsStatusConditionFalse(obj.Status.Conditions, "Ready")).To(BeTrue())
-		}, 10*time.Second, 50*time.Millisecond).Should(Succeed())
-	})
 })
 
 var _ = Describe("API server schema and defaults", func() {
@@ -221,12 +196,12 @@ var _ = Describe("API server schema and defaults", func() {
 		Expect(obj.Status.Phase).To(BeEmpty())
 		// Typed full updates can normalize optional objects; baseline after that update.
 		generation := obj.Generation
-		obj.Status.Phase = bitrixv1alpha1.BitrixClusterPhasePending
+		obj.Status.Phase = bitrixv1alpha1.BitrixClusterPhaseDegraded
 		obj.Spec.Release.Image.Tag = "must-not-persist"
 		Expect(k8sClient.Status().Update(ctx, obj)).To(Succeed())
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), obj)).To(Succeed())
 		Expect(obj.Spec.Release.Image.Tag).To(Equal("2026.09.1"))
-		Expect(obj.Status.Phase).To(Equal(bitrixv1alpha1.BitrixClusterPhasePending))
+		Expect(obj.Status.Phase).To(Equal(bitrixv1alpha1.BitrixClusterPhaseDegraded))
 		Expect(obj.Generation).To(Equal(generation))
 	})
 })

@@ -2,11 +2,11 @@
 
 Kubernetes operator для коробочного портала и сайтов Bitrix.
 
-**Итерация 2.1: runtime contract и файловые шаблоны.** Подготовлены renderer nginx/PHP/Bitrix,
-Secret projections и проверки runtime-образов; [контракт](docs/runtime-contract.md).
-Manager наблюдает `BitrixCluster` и выставляет
-`Pending`, `Ready=False`, reason `RuntimeNotImplemented`. Web, cron, Push & Pull,
-PVC и маршруты пока не создаются. Установка manager не запускает Bitrix.
+**Итерация 3: web workloads и storage.** Оператор создаёт nginx/PHP Deployment,
+HTTP Service, retained uploads PVC и versioned конфиги из родных файловых шаблонов.
+Поддержаны внешние MySQL/PostgreSQL и Redis, Secret rotation и статусы rollout.
+[Запуск и ограничения](docs/web-workloads.md). `WebReady` отражает работу web;
+общий `Ready=False` до проверки site IDs через ядро Bitrix.
 
 ## API и разработка
 
@@ -49,7 +49,7 @@ kubebuilder version
 
 ```sh
 make install
-# В отдельном терминале; приложение Bitrix не разворачивается.
+# В отдельном терминале; заранее подготовьте release image, Secrets, БД/Redis и StorageClass.
 make run
 kubectl apply -k config/samples
 kubectl get bitrixclusters
@@ -57,8 +57,7 @@ kubectl get bitrixcluster example -o yaml
 ```
 
 Пример содержит ссылки на Secrets и внешние DB/Redis, но credentials в Git не хранит.
-Образы приложения, StorageClass и endpoints — примеры; их runtime-совместимость будет
-проверяться в следующих итерациях. `sites[].tls` необязателен; наличие HTTPS listener
+Release image, StorageClass и endpoints нужно заменить своими значениями. `sites[].tls` необязателен; наличие HTTPS listener
 будет проверяться контроллером на этапе Gateway, а не текущей схемой.
 
 Чтобы запустить manager в кластере, соберите собственный образ:
@@ -76,9 +75,10 @@ health probes и защищённые metrics. Admission webhook и cert-manager
 ## Границы текущей итерации
 
 CI: форматирование, Go modules, build/vet/lint, API contract, envtest на 1.36.0/1.37.0,
-повторная генерация CRD/RBAC/deepcopy и сборка Kustomize. Контейнерный kind E2E scaffold
-сохранён под build tag `e2e`; CI пока его не запускает. Runtime и публикация образов —
-следующие итерации. См. [результаты проверок](docs/foundation.md).
+повторная генерация CRD/RBAC/deepcopy и сборка Kustomize. Добавлены native nginx/PHP
+проверки и kind E2E для web/storage с внешними MySQL/PostgreSQL/Redis.
+Cron/agents, Push, HPA, Gateway/TLS, site validation и публикация operator image —
+следующие итерации. См. [web workloads](docs/web-workloads.md).
 
 Лицензия: [Apache-2.0](LICENSE).
 
@@ -86,7 +86,7 @@ CI: форматирование, Go modules, build/vet/lint, API contract, envt
 
 Добавлены renderer nginx/PHP/Bitrix, PHP-only Secret projections, подготовка
 release image и Docker-проверки конфигураций. Подробности и ограничения —
-[docs/runtime-contract.md](docs/runtime-contract.md). Workloads пока не создаются.
+[docs/runtime-contract.md](docs/runtime-contract.md).
 
 Конфигурации компонентов находятся в [internal/runtime/templates](internal/runtime/templates/README.md).
 Go выполняет подстановку проверенных параметров; нативные PHP-файлы копируются без обработки.
