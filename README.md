@@ -79,3 +79,9 @@ CI: форматирование, Go modules, build/vet/lint, API contract, envt
 следующие итерации. См. [результаты проверок](docs/foundation.md).
 
 Лицензия: [Apache-2.0](LICENSE).
+
+## Runtime contract (итерация 2)
+
+Добавлены renderer nginx/PHP/Bitrix, PHP-only Secret projections, подготовка
+release image и Docker-проверки конфигураций. Подробности и ограничения —
+[docs/runtime-contract.md](docs/runtime-contract.md). Workloads пока не создаются.

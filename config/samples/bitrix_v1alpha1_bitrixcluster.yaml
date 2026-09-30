@@ -1,4 +1,4 @@
-# Schema example only: iteration 1 does not create application workloads.
+# Schema example only: iterations 1–2 do not create application workloads.
 # Create the referenced Secrets separately before runtime support is implemented.
 apiVersion: bitrix.m8.team/v1alpha1
 kind: BitrixCluster
@@ -25,9 +25,9 @@ spec:
   runtime:
     web:
       nginx:
-        image: quay.io/bitrix24/nginx:1.30.5-v1-alpine
+        image: quay.io/bitrix24/nginx:1.30.5-v1-alpine@sha256:77d042de08856d8644aad10c0bc744790e228b7837b76b2b8644159b073fcfb5
       php:
-        image: quay.io/bitrix24/php:8.2.34-fpm-v1-alpine
+        image: quay.io/bitrix24/php:8.2.34-fpm-v1-alpine@sha256:58aa3acaaf6da1f38c2297abade120780be02afad99656f97c444fa3207ab440
     cron:
       enabled: false
   database:
