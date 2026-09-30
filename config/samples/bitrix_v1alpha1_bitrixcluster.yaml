@@ -1,5 +1,5 @@
-# Schema example only: iterations 1–2 do not create application workloads.
-# Create the referenced Secrets separately before runtime support is implemented.
+# Replace release image, external endpoints and StorageClass; create referenced Secrets first.
+# WebReady reports web health; Ready stays False until kernel site validation is implemented.
 apiVersion: bitrix.m8.team/v1alpha1
 kind: BitrixCluster
 metadata:

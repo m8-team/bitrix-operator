@@ -1,0 +1,93 @@
+# Synthetic, disposable dependencies supplied by the test, never by the operator.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bitrix-web-test
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bitrix-dependencies-test
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis
+  namespace: bitrix-dependencies-test
+data:
+  redis.conf: |
+    bind 0.0.0.0
+    port 6379
+    requirepass fixture-password
+    save ""
+    appendonly no
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dependencies
+  namespace: bitrix-dependencies-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: external-dependencies
+  template:
+    metadata:
+      labels:
+        app: external-dependencies
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: mysql
+          image: mysql:8.4.11
+          env:
+            - {name: MYSQL_ROOT_PASSWORD, value: fixture-root-only}
+            - {name: MYSQL_DATABASE, value: bitrix}
+            - {name: MYSQL_USER, value: bitrix}
+            - {name: MYSQL_PASSWORD, value: fixture-password}
+          ports:
+            - {containerPort: 3306}
+          readinessProbe:
+            tcpSocket: {port: 3306}
+            initialDelaySeconds: 10
+            periodSeconds: 2
+        - name: postgres
+          image: postgres:17.11-trixie
+          env:
+            - {name: POSTGRES_DB, value: bitrix}
+            - {name: POSTGRES_USER, value: bitrix}
+            - {name: POSTGRES_PASSWORD, value: fixture-password}
+          ports:
+            - {containerPort: 5432}
+          readinessProbe:
+            exec: {command: [pg_isready, -U, bitrix]}
+            periodSeconds: 2
+        - name: redis
+          image: redis:8.2.10-alpine
+          command: [redis-server, /etc/redis/redis.conf]
+          ports:
+            - {containerPort: 6379}
+          volumeMounts:
+            - {name: redis, mountPath: /etc/redis, readOnly: true}
+          readinessProbe:
+            tcpSocket: {port: 6379}
+            periodSeconds: 2
+      volumes:
+        - name: redis
+          configMap: {name: redis}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dependencies
+  namespace: bitrix-dependencies-test
+spec:
+  selector:
+    app: external-dependencies
+  ports:
+    - {name: mysql, port: 3306}
+    - {name: postgres, port: 5432}
+    - {name: redis, port: 6379}

@@ -1,8 +1,7 @@
 # План разработки Bitrix Operator
 
-Дата проверки источников: 2026-09-30. Статус: итерация 2.1 — родные файловые шаблоны реализованы;
-см. docs/runtime-contract.md. Foundation объединён в main (PR #1). Следующий этап —
-итерация 3, Kubernetes workloads и storage.
+Дата проверки источников: 2026-09-30. Статус: итерация 3 — web workloads и storage реализованы;
+см. docs/web-workloads.md. Следующий этап — итерация 4, cron и agents.
 Репозиторий: https://github.com/m8-team/bitrix-operator
 Go module: github.com/m8-team/bitrix-operator
 
@@ -336,16 +335,19 @@ nginx/FPM/INI/PHP конфигураций в Go-строках нет; тест
 ### 3. Первый вертикальный срез: web и storage
 
 - Использовать файловые шаблоны и renderer из завершённой доработки 2.1.
-- PVC retention, collision handling, безопасный resize.
-- Release init container, web Deployment nginx/PHP, Service, конфигурации.
-- Подключение MySQL/PostgreSQL и Redis, Secret dependency watches.
-- Conditions и runtime/release/sites status, probes.
-- Работа внутреннего HTTP без установленного Gateway API.
+- [x] PVC retention, collision handling, безопасный resize.
+- [x] Release init container, web Deployment nginx/PHP, Service, конфигурации.
+- [x] Подключение MySQL/PostgreSQL и Redis, Secret dependency watches.
+- [x] Conditions и runtime/release/sites status, probes; site validation пока Unknown.
+- [x] Работа внутреннего HTTP без установленного Gateway API.
 
 Готовность: CR приводит к рабочему web fixture; изменение конфигурации приводит
 к rollout; удаленный дочерний ресурс восстанавливается; повторный reconcile не
 создает diff; uploads сохраняется после удаления CR.
 Реальная функциональность Bitrix подтверждается отдельным smoke test.
+
+Отдельно запланировать pruning неиспользуемых immutable ConfigMap, процедуру
+recovery retained PVC и site-validation Job; `Ready` до последнего остаётся False.
 
 ### 4. Cron и agents
 

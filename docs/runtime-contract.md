@@ -1,9 +1,9 @@
 # Runtime contract v1 — итерация 2
 
 Итерация добавляет чистый renderer `internal/runtime`, build-time подготовку release
-и исполняемые проверки конфигураций. Reconciler пока сохраняет
-`Ready=False / RuntimeNotImplemented`: Deployment, PVC и validation Job появляются
-в следующих итерациях. API и RBAC не изменены.
+и исполняемые проверки конфигураций. В итерации 3 добавлены Deployment, Service,
+retained PVC и dependency probes — см. [web workloads](web-workloads.md). API
+не изменён; RBAC расширен для runtime-ресурсов. Site-validation Job ещё не реализован.
 
 ## Родные файловые шаблоны — итерация 2.1
 
@@ -15,8 +15,8 @@ PHP — `.ini.tmpl`, PHP-FPM — статический `.conf`, Bitrix — ст
 в файлах runtime, а `manifest.json` передаёт PHP только данные и ссылки на них.
 
 Полные конфигурации удалены из Go-строк. Golden tests фиксируют совпадение всех
-выходных файлов и hash Bundle с предыдущим renderer, включая custom hosts/paths;
-перенос сам по себе не меняет rollout hash. Build script также копирует родные
+выходных файлов и hash Bundle, включая custom hosts/paths. Перенос 2.1 не менял
+результат; в итерации 3 эталоны явно обновлены для probe server и helper scripts. Build script также копирует родные
 PHP placeholders вместо сборки PHP через shell. Структура, upstream provenance,
 экранирование и добавление нового шаблона описаны в
 [templates/README.md](../internal/runtime/templates/README.md).
@@ -97,7 +97,8 @@ USER 979:979
 `Render(spec)` возвращает независимые `Nginx`, `PHP`, projected Secret sources и
 детерминированный hash конфигурации. Secret data не принимаются на вход, не
 запрашиваются API-клиентом и не участвуют в hash. Изменение Secret требует отдельного
-watch/rollout механизма следующей итерации; данный hash не решает ротацию.
+watch/rollout механизма: он реализован в итерации 3 отдельным hash metadata Secrets;
+данный config hash не решает ротацию.
 
 | Данные | Размещение | Доступ |
 |---|---|---|

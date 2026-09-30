@@ -10,6 +10,9 @@
 | `php/php-fpm.conf` | FPM global/pool configuration | побайтное копирование |
 | `bitrix/settings.php` | PHP overlay connections/cache/session/crypto | побайтное копирование |
 | `bitrix/settings-wrapper.php` | entry point для release settings | побайтное копирование |
+| `bitrix/init-release.sh` | копирование release и подготовка writable mount targets | побайтное копирование |
+| `bitrix/fpm-live.php` | локальная liveness PHP-FPM | побайтное копирование |
+| `bitrix/ready.php` | readiness DB/Redis через settings wrapper | побайтное копирование |
 | `bitrix/license_key.php` | чтение license из Secret file | побайтное копирование |
 | `bitrix/settings-extra.php` | build-time placeholder дополнительного settings | только сборка release |
 | `bitrix/license-placeholder.php` | build-time placeholder лицензии | только сборка release |
@@ -73,7 +76,9 @@
    BITRIX_RUNTIME_CONTAINER_TESTS=1 go test -count=1 -v ./internal/runtime
    ```
 
-Golden files в `../testdata/golden` зафиксированы предыдущим renderer до переноса.
+Golden files в `../testdata/golden` первоначально зафиксированы до переноса 2.1;
+в итерации 3 явно обновлены для probes/init helpers. Команда обновления:
+`go run ./hack/update-golden`; каждый diff требует просмотра.
 Проверяются все выходные файлы и hash Bundle для default/custom путей и hosts:
 рефакторинг не должен вызывать лишний rollout. При намеренном изменении поведения
 эталоны обновляются явно с просмотром diff; тесты никогда не перезаписывают их.

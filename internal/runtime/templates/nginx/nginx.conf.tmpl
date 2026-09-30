@@ -14,6 +14,19 @@ http {
  scgi_temp_path /tmp/scgi;
  client_max_body_size 1024m;
  sendfile on;
+ server {
+  listen 8081;
+  server_name _;
+  access_log off;
+  location = /live { return 200 'ok'; }
+  location = /ready {
+   include /etc/nginx/fastcgi_params;
+   fastcgi_param SCRIPT_FILENAME /run/bitrix-config/ready.php;
+   fastcgi_pass 127.0.0.1:9000;
+   fastcgi_read_timeout 7s;
+  }
+  location / { return 404; }
+ }
  server { listen 8080 default_server; server_name _; return 444; }
  server {
   listen 8080;
