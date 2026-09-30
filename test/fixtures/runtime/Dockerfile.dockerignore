@@ -1,0 +1,12 @@
+**
+!test/
+!test/fixtures/
+!test/fixtures/runtime/
+!test/fixtures/runtime/**
+!internal/
+!internal/runtime/
+!internal/runtime/assets/
+!internal/runtime/assets/**
+!hack/
+!hack/runtime/
+!hack/runtime/prepare-release.sh
