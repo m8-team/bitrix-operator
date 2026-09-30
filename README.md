@@ -2,7 +2,9 @@
 
 Kubernetes operator для коробочного портала и сайтов Bitrix.
 
-**Итерация 1: API foundation.** Manager наблюдает `BitrixCluster` и выставляет
+**Итерация 2: runtime contract и конфигурации.** Подготовлены renderer nginx/PHP/Bitrix,
+Secret projections и проверки runtime-образов; [контракт](docs/runtime-contract.md).
+Manager наблюдает `BitrixCluster` и выставляет
 `Pending`, `Ready=False`, reason `RuntimeNotImplemented`. Web, cron, Push & Pull,
 PVC и маршруты пока не создаются. Установка manager не запускает Bitrix.
 

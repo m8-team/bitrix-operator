@@ -1,6 +1,8 @@
 # План разработки Bitrix Operator
 
-Дата проверки источников: 2026-09-29. Статус: итерация 1 — API foundation; см. docs/foundation.md.
+Дата проверки источников: 2026-09-30. Статус: итерация 2 — runtime contract и renderer;
+см. docs/runtime-contract.md. Foundation объединён в main (PR #1). Следующий этап —
+итерация 3, Kubernetes workloads и storage.
 Репозиторий: https://github.com/m8-team/bitrix-operator
 Go module: github.com/m8-team/bitrix-operator
 
