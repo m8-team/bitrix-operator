@@ -1,0 +1,25 @@
+# Test-only storage: the isolated kind cluster has exactly one node.
+# Production requires a shared CSI filesystem with cross-node flock semantics.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cron-test
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: Immediate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: cron-test
+spec:
+  capacity:
+    storage: 128Mi
+  accessModes: [ReadWriteMany]
+  storageClassName: cron-test
+  persistentVolumeReclaimPolicy: Retain
+  claimRef:
+    namespace: bitrix-web-test
+    name: cron-uploads
+  hostPath:
+    path: /var/local/bitrix-cron-uploads
+    type: Directory

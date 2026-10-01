@@ -21,4 +21,10 @@ spec["redis"]["host"] = connection["host"]
 spec["storage"]["uploads"]["persistentVolumeClaim"] = {
     "storageClassName": "standard", "accessModes": ["ReadWriteOnce"], "size": "128Mi"
 }
+if len(sys.argv) > 2 and sys.argv[2] == "cron":
+    cluster["metadata"]["name"] = "cron"
+    spec["runtime"]["cron"] = {"enabled": True, "agents": {"enabled": True, "interval": "1.2s"}}
+    spec["storage"]["uploads"]["persistentVolumeClaim"] = {
+        "storageClassName": "cron-test", "accessModes": ["ReadWriteMany"], "size": "128Mi"
+    }
 json.dump(cluster, sys.stdout)

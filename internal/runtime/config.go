@@ -17,7 +17,7 @@ import (
 
 // Only native component files are embedded; documentation and golden files are excluded.
 //
-//go:embed templates/nginx/* templates/php/* templates/bitrix/*
+//go:embed templates/nginx/* templates/php/* templates/bitrix/* templates/cron/*
 var configFiles embed.FS
 
 type configData struct {
@@ -44,6 +44,11 @@ func renderConfigs(data configData) (map[string]string, map[string]string, error
 		{"bitrix/settings.php", "settings.php", php},
 		{"bitrix/settings-wrapper.php", "settings-wrapper.php", php},
 		{"bitrix/license_key.php", "license_key.php", php},
+		{"cron/scheduler.php", "scheduler.php", php},
+		{"cron/scheduler.sh", "scheduler.sh", php},
+		{"cron/agents.php", "agents.php", php},
+		{"cron/health.php", "cron-health.php", php},
+		{"cron/web-prepend.php", "web-prepend.php", php},
 	}
 	for _, file := range files {
 		content, err := renderFile(configFiles, "templates/"+file.source, data)

@@ -25,6 +25,7 @@ func TestRuntimeContainers(t *testing.T) {
 		t.Run(mode, func(t *testing.T) { testPHPContainer(t, mode) })
 	}
 	t.Run("nginx", testNginxContainer)
+	t.Run("cron", testCronContainer)
 }
 
 func writeFiles(t *testing.T, files map[string]string) string {
