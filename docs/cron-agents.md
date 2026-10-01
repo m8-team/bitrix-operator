@@ -1,7 +1,7 @@
 # Cron и agents — итерация 4
 
 Оператор использует существующие `runtime.cron.enabled`, `agents.enabled` и
-`agents.interval`. API/CRD не изменены. Все PHP-файлы находятся в
+`agents.interval`. API/CRD не изменены. Все PHP/shell-файлы находятся в
 `internal/runtime/templates/cron/` и попадают в ConfigMap без генерации исходного кода в Go.
 
 ```yaml
@@ -48,7 +48,8 @@ Sender campaigns, backup и отдельная очередь email не зап�
   от web; Service не направляет HTTP в cron. Образ и resources берутся из `runtime.web.php`.
 - Общие release init, projected Secrets, PHP settings, readonly code, UID/GID 979,
   seccomp, отсутствие service account token; uploads/cache доступны на запись.
-- PHP требует `pcntl` и `proc_open`. Планировщик — PID 1; запускает свежий PHP-процесс
+- PHP требует `proc_open`; `pcntl` не нужен. Shell-wrapper — PID 1, принимает сигналы
+  и передаёт запрос остановки PHP supervisor через файл. Supervisor запускает свежий PHP-процесс
   на каждый цикл. Интервал 1s–24h, допустимы дробные секунды, например `1.2s`.
   Это задержка **после завершения** предыдущего цикла; пропущенные запуски не накапливаются.
 - Worker удерживает неблокирующий `flock` на

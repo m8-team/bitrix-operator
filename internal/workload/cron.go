@@ -15,7 +15,7 @@ func Cron(c *bx.BitrixCluster, b *render.Bundle, revision, image string) *apps.D
 	pod := phpPod(c, b, image)
 	php := &pod.Containers[0]
 	php.WithName("cron")
-	php.Command = []string{"php", render.ConfigRoot + "/scheduler.php"}
+	php.Command = []string{"/bin/sh", render.ConfigRoot + "/scheduler.sh"}
 	probe := func(mode string) *core.ProbeApplyConfiguration {
 		return core.Probe().WithExec(core.ExecAction().WithCommand("php", render.ConfigRoot+"/cron-health.php", mode)).WithPeriodSeconds(5).WithTimeoutSeconds(3).WithFailureThreshold(3)
 	}

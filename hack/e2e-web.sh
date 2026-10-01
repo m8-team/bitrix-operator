@@ -16,11 +16,12 @@ cleanup() {
         kubectl get pods,pvc,bitrixclusters -A -o wide || true
         kubectl -n bitrix-web-test get events --sort-by=.lastTimestamp || true
         kubectl -n bitrix-operator-system logs deployment/bitrix-operator-controller-manager -c manager --tail=100 || true
-        for name in mysql postgresql; do
+        for name in mysql postgresql cron; do
             for container in release nginx php; do
                 kubectl -n bitrix-web-test logs "deployment/$name-web" -c "$container" --tail=50 || true
             done
         done
+        kubectl -n bitrix-web-test logs deployment/cron-cron -c cron --tail=50 || true
     fi
     kind delete cluster --name "$cluster"
     rm -f "$KUBECONFIG"

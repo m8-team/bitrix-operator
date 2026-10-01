@@ -27,7 +27,7 @@ func TestCronPodIsolation(t *testing.T) {
 		t.Fatal("invalid cron topology")
 	}
 	cron := pod.Containers[0]
-	if cron.Image != c.Spec.Runtime.Web.PHP.Image || cron.Command[1] != render.ConfigRoot+"/scheduler.php" {
+	if cron.Image != c.Spec.Runtime.Web.PHP.Image || cron.Command[1] != render.ConfigRoot+"/scheduler.sh" {
 		t.Fatal("cron command/image mismatch")
 	}
 	if !*cron.SecurityContext.ReadOnlyRootFilesystem || *cron.SecurityContext.AllowPrivilegeEscalation || *cron.SecurityContext.RunAsUser != 979 {

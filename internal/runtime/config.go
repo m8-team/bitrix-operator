@@ -45,6 +45,7 @@ func renderConfigs(data configData) (map[string]string, map[string]string, error
 		{"bitrix/settings-wrapper.php", "settings-wrapper.php", php},
 		{"bitrix/license_key.php", "license_key.php", php},
 		{"cron/scheduler.php", "scheduler.php", php},
+		{"cron/scheduler.sh", "scheduler.sh", php},
 		{"cron/agents.php", "agents.php", php},
 		{"cron/health.php", "cron-health.php", php},
 		{"cron/web-prepend.php", "web-prepend.php", php},
