@@ -62,7 +62,10 @@ Bitrix ещё не реализована. `SitesValidated=Unknown`, `sites[].ex
 
 Typed apply configurations содержат только поля оператора. Перед каждым SSA проверяются
 ownerReference и resourceVersion. Отсутствующие ресурсы сначала создаются обычным create,
-чтобы гонка создания не привела к присвоению чужого объекта. На принадлежащем CR ресурсе
+чтобы гонка создания не привела к присвоению чужого объекта. Затем собственная запись
+Create/Update переносится в Apply официальным helper client-go с проверкой resourceVersion.
+Это позволяет удалять из Deployment поля, убранные из CR, и исправляет ранее созданные
+ресурсы без пересоздания. Чужие field managers не мигрируются. На принадлежащем CR ресурсе
 оператор принудительно восстанавливает управляемые поля; сторонние дополнительные поля
 не включаются в apply. Не редактировать replicas/image/config этих Deployment вручную:
 источник желаемого состояния — CR. PVC изменяется отдельным optimistic patch.
@@ -78,7 +81,8 @@ registry credentials и доступность образов проверяют
 ## Проверки и границы
 
 `make test` проверяет реальный API server (envtest), SSA/idempotence, rollout counters,
-rotation, metadata watch, collision, immutable configs и PVC resize. Unit tests
+rotation, metadata watch, collision, immutable configs, PVC resize, удаление полей
+и миграцию ранее созданных записей владения. Unit tests
 проверяют pod isolation и допустимые имена ресурсов. `Runtime contract` CI проверяет
 синтаксис родными nginx/PHP tools и сохранение settings.
 

@@ -72,11 +72,19 @@ var _ = Describe("Web and storage reconciliation", func() {
 		p := uploads(c)
 		Expect(p.OwnerReferences).To(BeEmpty())
 		Expect(d.OwnerReferences[0].UID).To(Equal(c.UID))
+		service := &corev1.Service{}
+		serviceKey := client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "web")}
+		Expect(k8sClient.Get(ctx, serviceKey, service)).To(Succeed())
+		serviceVersion, clusterIP := service.ResourceVersion, service.Spec.ClusterIP
+		Expect(clusterIP).NotTo(BeEmpty())
 		version := d.ResourceVersion
 		statusVersion := c.ResourceVersion
 		reconcileWeb(c)
 		Expect(webDeployment(c).ResourceVersion).To(Equal(version))
 		Expect(c.ResourceVersion).To(Equal(statusVersion))
+		Expect(k8sClient.Get(ctx, serviceKey, service)).To(Succeed())
+		Expect(service.Spec.ClusterIP).To(Equal(clusterIP))
+		Expect(service.ResourceVersion).To(Equal(serviceVersion))
 		Expect(meta.IsStatusConditionFalse(c.Status.Conditions, "Ready")).To(BeTrue())
 		Expect(c.Status.Sites[0].Exists).To(BeFalse())
 		Expect(k8sClient.Delete(ctx, d)).To(Succeed())
@@ -95,6 +103,39 @@ var _ = Describe("Web and storage reconciliation", func() {
 		d = webDeployment(c)
 		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(c.Spec.Runtime.Web.Nginx.Image))
 		Expect(d.Annotations["example.com/note"]).To(Equal("preserve"))
+	})
+
+	It("removes fields omitted from the desired configuration", func() {
+		c := webSample()
+		c.Spec.Runtime.Web.PHP.Resources.Limits = corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("512Mi")}
+		Expect(k8sClient.Update(ctx, c)).To(Succeed())
+		reconcileWeb(c)
+		c.Spec.Runtime.Web.PHP.Resources = corev1.ResourceRequirements{}
+		Expect(k8sClient.Update(ctx, c)).To(Succeed())
+		reconcileWeb(c)
+		d := webDeployment(c)
+		Expect(d.Spec.Template.Spec.Containers[1].Resources.Limits).To(BeEmpty())
+		Expect(d.Spec.Template.Spec.Containers[1].Resources.Requests).To(BeEmpty())
+		for _, entry := range d.ManagedFields {
+			if entry.Manager == "bitrix-operator" {
+				Expect(entry.Operation).To(Equal(metav1.ManagedFieldsOperationApply))
+			}
+		}
+	})
+
+	It("migrates an existing operator Update entry before removing a field", func() {
+		c := reconcileWeb(webSample())
+		d := webDeployment(c)
+		d.Spec.Template.Spec.Containers[1].Resources.Limits = corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("512Mi")}
+		Expect(k8sClient.Update(ctx, d, client.FieldOwner("bitrix-operator"))).To(Succeed())
+		Expect(d.ManagedFields).To(ContainElement(And(
+			HaveField("Manager", "bitrix-operator"), HaveField("Operation", metav1.ManagedFieldsOperationUpdate))))
+		reconcileWeb(c)
+		d = webDeployment(c)
+		Expect(d.Spec.Template.Spec.Containers[1].Resources.Limits).To(BeEmpty())
+		version := d.ResourceVersion
+		reconcileWeb(c)
+		Expect(webDeployment(c).ResourceVersion).To(Equal(version))
 	})
 
 	It("requires current rollout counters and bound storage and preserves condition transition times", func() {

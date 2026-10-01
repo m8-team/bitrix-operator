@@ -13,6 +13,11 @@
 - Typed SSA builders для web Deployment, Service, versioned immutable ConfigMap;
   owner UID + resourceVersion проверяются до apply. Create предшествует apply новых
   ресурсов, предотвращая присвоение объекта при гонке создания.
+- Дополнение 2026-10-01: перед Apply собственная запись managedFields/Update
+  переносится в Apply через `client-go/util/csaupgrade.UpgradeManagedFieldsPatch`.
+  Patch содержит precondition resourceVersion; чужие field managers не мигрируются.
+  Одного ForceOwnership недостаточно: общая запись Create/Update сохраняла поля,
+  удалённые из желаемого состояния (например, resource limits).
 - ForceOwnership применяется только к явно объявленным управляемым полям уже
   принадлежащего CR объекта. Оно необходимо и при переходе с create/Update field manager
   на Apply, и для исправления ручного drift. Чужие ресурсы не усыновляются.
