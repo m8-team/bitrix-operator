@@ -88,6 +88,33 @@ kubectl -n bitrix-web-test get pods -o json | python3 -c \
 kubectl -n bitrix-dependencies-test scale deployment/dependencies --replicas=1
 kubectl -n bitrix-dependencies-test rollout status deployment/dependencies --timeout=240s
 kubectl -n bitrix-web-test wait bitrixcluster/mysql --for=condition=WebReady --timeout=180s
+# Cron fixture uses a static, single-node RWX test PV; this does NOT certify a distributed CSI backend.
+docker exec "$cluster-control-plane" mkdir -p /var/local/bitrix-cron-uploads
+docker exec "$cluster-control-plane" chown 979:979 /var/local/bitrix-cron-uploads
+kubectl apply -f test/e2e/web/cron-storage.yaml
+kubectl create --dry-run=client -f config/samples/bitrix_v1alpha1_bitrixcluster.yaml -o json |
+    python3 test/e2e/web/cluster.py MySQL cron | kubectl apply -f -
+kubectl -n bitrix-web-test wait bitrixcluster/cron --for=condition=CronReady --timeout=180s
+kubectl -n bitrix-web-test wait bitrixcluster/cron --for=condition=WebReady --timeout=180s
+kubectl -n bitrix-web-test exec deployment/cron-web -c php -- test -s /opt/www/upload/ends
+test "$(kubectl -n bitrix-web-test exec deployment/cron-web -c nginx -- wget -qO- --header='Host: portal.example.com' http://cron-web/agent-mode.php)" = disabled
+old_cron=$(kubectl -n bitrix-web-test get deployment/cron-cron -o jsonpath='{.spec.template.metadata.annotations.bitrix\.m8\.team/config-hash}')
+kubectl -n bitrix-web-test patch bitrixcluster/cron --type=merge -p '{"spec":{"runtime":{"cron":{"agents":{"enabled":false}}}}}'
+for attempt in $(seq 1 60); do
+    new_cron=$(kubectl -n bitrix-web-test get deployment/cron-cron -o jsonpath='{.spec.template.metadata.annotations.bitrix\.m8\.team/config-hash}')
+    [ "$new_cron" != "$old_cron" ] && break
+    sleep 2
+done
+test "$new_cron" != "$old_cron"
+kubectl -n bitrix-web-test rollout status deployment/cron-cron --timeout=120s
+before=$(kubectl -n bitrix-web-test exec deployment/cron-web -c php -- cat /opt/www/upload/starts)
+sleep 3
+after=$(kubectl -n bitrix-web-test exec deployment/cron-web -c php -- cat /opt/www/upload/starts)
+test "$before" = "$after"
+kubectl -n bitrix-web-test exec deployment/cron-web -c php -- sh -ec 'test ! -e /opt/www/upload/overlap'
+kubectl -n bitrix-web-test patch bitrixcluster/cron --type=merge -p '{"spec":{"runtime":{"cron":{"enabled":false}}}}'
+kubectl -n bitrix-web-test wait deployment/cron-cron --for=delete --timeout=120s
+kubectl -n bitrix-web-test wait bitrixcluster/cron --for=jsonpath='{.status.conditions[?(@.type=="CronReady")].reason}'=Disabled --timeout=120s
 # Data survives CR deletion; a new CR with the same name cannot adopt it silently.
 echo "Checking retained PVC and refusal to adopt it"
 pvc_uid=$(kubectl -n bitrix-web-test get pvc/mysql-uploads -o jsonpath='{.metadata.uid}')

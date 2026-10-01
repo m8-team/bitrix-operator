@@ -77,8 +77,10 @@ health probes и защищённые metrics. Admission webhook и cert-manager
 CI: форматирование, Go modules, build/vet/lint, API contract, envtest на 1.36.0/1.37.0,
 повторная генерация CRD/RBAC/deepcopy и сборка Kustomize. Добавлены native nginx/PHP
 проверки и kind E2E для web/storage с внешними MySQL/PostgreSQL/Redis.
-Cron/agents, Push, HPA, Gateway/TLS, site validation и публикация operator image —
-следующие итерации. См. [web workloads](docs/web-workloads.md).
+Cron/agents реализованы отдельным singleton Deployment с native PHP scheduler.
+Требования к RWX, подготовке Bitrix и гарантии блокировки — [cron и agents](docs/cron-agents.md).
+Push, HPA, Gateway/TLS, site validation и публикация operator image — следующие итерации.
+См. также [web workloads](docs/web-workloads.md).
 
 Лицензия: [Apache-2.0](LICENSE).
 

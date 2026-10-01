@@ -90,11 +90,9 @@ func phpProbe() *core.ProbeApplyConfiguration {
 		WithTimeoutSeconds(3).WithPeriodSeconds(10).WithFailureThreshold(3)
 }
 
-// Deployment mounts code read-only in both web containers and credentials only in PHP.
-func Deployment(c *bx.BitrixCluster, b *render.Bundle, revision, image string) *apps.DeploymentApplyConfiguration {
-	nginxConfig := Name(c, "nginx-"+b.Hash[:12])
+// phpPod shares the release, storage and isolation contract between web and cron.
+func phpPod(c *bx.BitrixCluster, b *render.Bundle, image string) *core.PodSpecApplyConfiguration {
 	phpConfig := Name(c, "php-"+b.Hash[:12])
-	replicas := max(c.Spec.Runtime.Web.Replicas, 1)
 	mode := int32(0444)
 	projected := core.ProjectedVolumeSource().WithDefaultMode(0440)
 	for _, p := range b.Secrets {
@@ -112,9 +110,7 @@ func Deployment(c *bx.BitrixCluster, b *render.Bundle, revision, image string) *
 			core.Volume().WithName("code").WithEmptyDir(core.EmptyDirVolumeSource()),
 			core.Volume().WithName("uploads").WithPersistentVolumeClaim(core.PersistentVolumeClaimVolumeSource().WithClaimName(Name(c, "uploads"))),
 			core.Volume().WithName("temporary").WithEmptyDir(core.EmptyDirVolumeSource().WithSizeLimit(c.Spec.Storage.Temporary.SizeLimit)),
-			core.Volume().WithName("nginx-tmp").WithEmptyDir(core.EmptyDirVolumeSource().WithSizeLimit(resource.MustParse("64Mi"))),
 			core.Volume().WithName("php-tmp").WithEmptyDir(core.EmptyDirVolumeSource().WithSizeLimit(resource.MustParse("64Mi"))),
-			core.Volume().WithName("nginx-config").WithConfigMap(core.ConfigMapVolumeSource().WithName(nginxConfig).WithDefaultMode(mode)),
 			core.Volume().WithName("php-config").WithConfigMap(core.ConfigMapVolumeSource().WithName(phpConfig).WithDefaultMode(mode)),
 			core.Volume().WithName("credentials").WithProjected(projected))
 	for _, ref := range c.Spec.Release.ImagePullSecrets {
@@ -127,12 +123,6 @@ func Deployment(c *bx.BitrixCluster, b *render.Bundle, revision, image string) *
 	init := core.Container().WithName("release").WithImage(image).WithImagePullPolicy(policy).
 		WithCommand("/bin/sh", render.ConfigRoot+"/init-release.sh", c.Spec.Storage.Uploads.MountPath).WithSecurityContext(security()).
 		WithVolumeMounts(mount("code", "/work/code", false), mount("temporary", "/work/temporary", false), mount("php-config", render.ConfigRoot, true))
-	nginx := core.Container().WithName("nginx").WithImage(c.Spec.Runtime.Web.Nginx.Image).WithImagePullPolicy(corev1.PullIfNotPresent).
-		WithCommand("nginx", "-g", "daemon off;", "-c", "/run/nginx/nginx.conf").WithSecurityContext(security()).
-		WithResources(resources(c.Spec.Runtime.Web.Nginx.Resources)).WithPorts(core.ContainerPort().WithName("http").WithContainerPort(8080)).
-		WithVolumeMounts(mount("code", render.Root, true), mount("uploads", c.Spec.Storage.Uploads.MountPath, true),
-			mount("nginx-config", "/run/nginx", true), mount("nginx-tmp", "/tmp", false)).
-		WithStartupProbe(httpProbe("/live").WithFailureThreshold(30)).WithLivenessProbe(httpProbe("/live")).WithReadinessProbe(httpProbe("/ready"))
 	php := core.Container().WithName("php").WithImage(c.Spec.Runtime.Web.PHP.Image).WithImagePullPolicy(corev1.PullIfNotPresent).
 		WithCommand("php-fpm", "-y", render.ConfigRoot+"/php-fpm.conf").WithSecurityContext(security()).
 		WithResources(resources(c.Spec.Runtime.Web.PHP.Resources)).
@@ -145,8 +135,27 @@ func Deployment(c *bx.BitrixCluster, b *render.Bundle, revision, image string) *
 	for _, dir := range []string{"cache", "managed_cache", "stack_cache", "html_pages"} {
 		php.WithVolumeMounts(mount("temporary", render.Root+"/bitrix/"+dir, false).WithSubPath(dir))
 	}
+	pod.WithInitContainers(init).WithContainers(php)
+	return pod
+}
+
+// Deployment mounts code read-only in both web containers and credentials only in PHP.
+func Deployment(c *bx.BitrixCluster, b *render.Bundle, revision, image string) *apps.DeploymentApplyConfiguration {
+	pod := phpPod(c, b, image)
+	php := pod.Containers[0]
+	pod.Containers = nil
+	nginx := core.Container().WithName("nginx").WithImage(c.Spec.Runtime.Web.Nginx.Image).WithImagePullPolicy(corev1.PullIfNotPresent).
+		WithCommand("nginx", "-g", "daemon off;", "-c", "/run/nginx/nginx.conf").WithSecurityContext(security()).
+		WithResources(resources(c.Spec.Runtime.Web.Nginx.Resources)).WithPorts(core.ContainerPort().WithName("http").WithContainerPort(8080)).
+		WithVolumeMounts(mount("code", render.Root, true), mount("uploads", c.Spec.Storage.Uploads.MountPath, true),
+			mount("nginx-config", "/run/nginx", true), mount("nginx-tmp", "/tmp", false)).
+		WithStartupProbe(httpProbe("/live").WithFailureThreshold(30)).WithLivenessProbe(httpProbe("/live")).WithReadinessProbe(httpProbe("/ready"))
 	nginx.WithVolumeMounts(mount("temporary", render.Root+"/bitrix/html_pages", true).WithSubPath("html_pages"))
-	pod.WithInitContainers(init).WithContainers(nginx, php)
+	pod.WithContainers(nginx, &php)
+	pod.WithVolumes(
+		core.Volume().WithName("nginx-tmp").WithEmptyDir(core.EmptyDirVolumeSource().WithSizeLimit(resource.MustParse("64Mi"))),
+		core.Volume().WithName("nginx-config").WithConfigMap(core.ConfigMapVolumeSource().WithName(Name(c, "nginx-"+b.Hash[:12])).WithDefaultMode(0444)))
+	replicas := max(c.Spec.Runtime.Web.Replicas, 1)
 	strategy := apps.DeploymentStrategy().WithType(appsv1.RecreateDeploymentStrategyType)
 	for _, mode := range c.Spec.Storage.Uploads.PersistentVolumeClaim.AccessModes {
 		if mode == corev1.ReadWriteMany {

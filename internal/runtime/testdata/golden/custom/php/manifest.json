@@ -1,4 +1,10 @@
 {
+  "cron": {
+    "enabled": false,
+    "agents": false,
+    "intervalSeconds": 0,
+    "uploadsPath": "/opt/www/media.v2+files"
+  },
   "version": "v1",
   "engine": "MySQL",
   "connections": {

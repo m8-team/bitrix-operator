@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	bitrixv1 "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,7 +36,15 @@ type Bundle struct {
 	Hash    string
 }
 
+type cronData struct {
+	Enabled         bool    `json:"enabled"`
+	Agents          bool    `json:"agents"`
+	IntervalSeconds float64 `json:"intervalSeconds"`
+	UploadsPath     string  `json:"uploadsPath"`
+}
+
 type manifest struct {
+	Cron        cronData                  `json:"cron"`
 	Version     string                    `json:"version"`
 	Engine      bitrixv1.DatabaseEngine   `json:"engine"`
 	Connections map[string]connectionData `json:"connections"`
@@ -70,10 +79,19 @@ func Render(spec bitrixv1.BitrixClusterSpec) (*Bundle, error) {
 	if err != nil {
 		return nil, err
 	}
+	cron := spec.Runtime.Cron
+	if cron.Enabled && (cron.Agents == nil || cron.Agents.Interval.Duration < time.Second || cron.Agents.Interval.Duration > 24*time.Hour) {
+		return nil, fmt.Errorf("cron requires an agents interval between 1s and 24h")
+	}
 	refs := newSecretSet()
 	m := manifest{Version: ContractVersion, Engine: spec.Database.Engine,
 		Connections: map[string]connectionData{}, SessionMode: spec.Redis.Sessions.Mode,
 		SessionTTL: spec.Redis.Sessions.TTL, CacheSID: spec.Redis.Cache.SID}
+	m.Cron = cronData{Enabled: cron.Enabled, UploadsPath: spec.Storage.Uploads.MountPath}
+	if cron.Agents != nil {
+		m.Cron.Agents = cron.Enabled && cron.Agents.Enabled
+		m.Cron.IntervalSeconds = cron.Agents.Interval.Seconds()
+	}
 	if m.License, err = refs.add(spec.License.SecretRef); err != nil {
 		return nil, err
 	}

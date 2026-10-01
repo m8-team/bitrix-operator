@@ -14,6 +14,10 @@
 | `bitrix/fpm-live.php` | локальная liveness PHP-FPM | побайтное копирование |
 | `bitrix/ready.php` | readiness DB/Redis через settings wrapper | побайтное копирование |
 | `bitrix/license_key.php` | чтение license из Secret file | побайтное копирование |
+| `cron/scheduler.php` | duration scheduler, signals, heartbeat | побайтное копирование |
+| `cron/agents.php` | shared filesystem lock и Bitrix agent bootstrap | побайтное копирование |
+| `cron/health.php` | scheduler liveness/readiness | побайтное копирование |
+| `cron/web-prepend.php` | отключение HTTP agents в FPM | побайтное копирование |
 | `bitrix/settings-extra.php` | build-time placeholder дополнительного settings | только сборка release |
 | `bitrix/license-placeholder.php` | build-time placeholder лицензии | только сборка release |
 

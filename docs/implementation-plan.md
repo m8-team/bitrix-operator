@@ -1,7 +1,8 @@
 # План разработки Bitrix Operator
 
 Дата проверки источников: 2026-09-30. Статус: итерация 3 — web workloads и storage реализованы;
-см. docs/web-workloads.md. Следующий этап — итерация 4, cron и agents.
+см. docs/web-workloads.md. Итерация 4 реализует cron и agents; см. docs/cron-agents.md.
+Следующий этап — итерация 5, Push & Pull.
 Репозиторий: https://github.com/m8-team/bitrix-operator
 Go module: github.com/m8-team/bitrix-operator
 
@@ -358,10 +359,10 @@ recovery retained PVC и site-validation Job; `Ready` до последнего 
 
 ### 4. Cron и agents
 
-- Singleton Deployment Recreate, image PHP из runtime.web.php.
-- Duration scheduler, graceful stop и стратегия блокировки исполнения.
-- Согласованные настройки агентов web/cron.
-- Удаление owned cron workload при enabled=false.
+- [x] Singleton Deployment Recreate, image PHP из runtime.web.php.
+- [x] Duration scheduler, graceful stop и файловый lock на общем uploads PVC.
+- [x] Согласованные настройки агентов web/cron; подготовка DB options задокументирована.
+- [x] Foreground удаление owned cron workload при enabled=false.
 
 Готовность: тесты interval, agents=false, смены release и manager restart;
 нет одновременного исполнения в проверенных failure scenarios; ограничения
@@ -438,7 +439,8 @@ compatibility matrix, воспроизводимый build, проверенны
 - Контракт runtime images, UID/GID, PHP extensions, non-root entrypoints.
 - Куда Bitrix пишет кроме uploads/temp и как это согласуется с immutable code.
 - Session mode/TTL=0 semantics и shared Redis memory policy.
-- Блокировка cron при отказах MySQL/PostgreSQL.
+- Блокировка cron находится на общем uploads filesystem и не зависит от DB connection;
+  partition/failover распределённого storage требует отдельной проверки.
 - Site-validation Job result transport, limits, retry/refresh policy.
 - Gateway certificate ownership и фактически выбранный Gateway implementation.
 

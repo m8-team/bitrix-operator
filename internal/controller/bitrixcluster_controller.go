@@ -44,7 +44,7 @@ type BitrixClusterReconciler struct {
 
 // +kubebuilder:rbac:groups=bitrix.m8.team,resources=bitrixclusters,verbs=get;list;watch
 // +kubebuilder:rbac:groups=bitrix.m8.team,resources=bitrixclusters/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=services;configmaps,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
@@ -75,6 +75,11 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	condition(c, "Ready", metav1.ConditionFalse, "SiteValidationPending", "Web readiness does not validate Bitrix site IDs; kernel validation is pending")
 	condition(c, "SitesValidated", metav1.ConditionUnknown, "NotImplemented", "Kernel site validation will be implemented in a subsequent iteration")
 	condition(c, "WebReady", metav1.ConditionFalse, "RolloutPending", "Waiting for the desired web rollout")
+	condition(c, "CronReady", metav1.ConditionTrue, "Disabled", "Cron workload is disabled")
+	if c.Spec.Runtime.Cron.Enabled {
+		c.Status.Runtime.Cron.DesiredReplicas = 1
+		condition(c, "CronReady", metav1.ConditionFalse, "RolloutPending", "Waiting for the desired cron rollout")
+	}
 	condition(c, "StorageReady", metav1.ConditionUnknown, "NotObserved", "Uploads storage has not been observed")
 	err := r.reconcileResources(ctx, c)
 	result := ctrl.Result{}
@@ -94,6 +99,9 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		c.Status.Phase = bx.BitrixClusterPhaseDegraded
 		condition(c, "Ready", metav1.ConditionFalse, reason, message)
 		condition(c, "WebReady", metav1.ConditionFalse, reason, message)
+		if c.Spec.Runtime.Cron.Enabled || reason == "CronStopping" {
+			condition(c, "CronReady", metav1.ConditionFalse, reason, message)
+		}
 	}
 	// Conditions are evaluated provisionally above. Preserve transition times for unchanged final states.
 	for i := range c.Status.Conditions {
@@ -112,10 +120,9 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 func validateWorkload(c *bx.BitrixCluster) error {
 	s := c.Spec
-	if s.Runtime.Cron.Enabled || (s.Runtime.Cron.Agents != nil && s.Runtime.Cron.Agents.Enabled) ||
-		(s.Runtime.Push != nil && s.Runtime.Push.Enabled) || (s.Runtime.Web.Autoscaling != nil && s.Runtime.Web.Autoscaling.Enabled) ||
+	if (s.Runtime.Push != nil && s.Runtime.Push.Enabled) || (s.Runtime.Web.Autoscaling != nil && s.Runtime.Web.Autoscaling.Enabled) ||
 		(s.Networking != nil && s.Networking.Gateway != nil && s.Networking.Gateway.Enabled) {
-		return block("UnsupportedFeatures", "Cron, agents, Push, autoscaling and Gateway publication are not implemented yet")
+		return block("UnsupportedFeatures", "Push, autoscaling and Gateway publication are not implemented yet")
 	}
 	for _, site := range s.Sites {
 		if site.TLS != nil {
@@ -123,8 +130,8 @@ func validateWorkload(c *bx.BitrixCluster) error {
 		}
 	}
 	modes := s.Storage.Uploads.PersistentVolumeClaim.AccessModes
-	if slices.Contains(modes, corev1.ReadOnlyMany) || (s.Runtime.Web.Replicas > 1 && !slices.Contains(modes, corev1.ReadWriteMany)) {
-		return block("InvalidStorageMode", "Uploads require writable storage and ReadWriteMany for multiple replicas")
+	if slices.Contains(modes, corev1.ReadOnlyMany) || ((s.Runtime.Web.Replicas > 1 || s.Runtime.Cron.Enabled) && !slices.Contains(modes, corev1.ReadWriteMany)) {
+		return block("InvalidStorageMode", "Uploads require writable storage and ReadWriteMany for multiple web replicas or a separate cron workload")
 	}
 	if s.Storage.Uploads.PersistentVolumeClaim.Size.Sign() <= 0 || s.Storage.Temporary.SizeLimit.Sign() <= 0 {
 		return block("InvalidStorageSize", "Uploads and temporary storage sizes must be positive")
@@ -135,6 +142,11 @@ func validateWorkload(c *bx.BitrixCluster) error {
 func deploymentObject() *appsv1.Deployment { return &appsv1.Deployment{} }
 
 func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.BitrixCluster) error {
+	if !c.Spec.Runtime.Cron.Enabled {
+		if err := r.deleteCron(ctx, c); err != nil {
+			return err
+		}
+	}
 	if err := validateWorkload(c); err != nil {
 		return err
 	}
@@ -168,6 +180,11 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.
 	}
 	if err = r.apply(ctx, c, workload.Deployment(c, b, revision, image)); err != nil {
 		return err
+	}
+	if c.Spec.Runtime.Cron.Enabled {
+		if err = r.reconcileCron(ctx, c, b, revision, image, pvc.Status.Phase == corev1.ClaimBound); err != nil {
+			return err
+		}
 	}
 	deployment := deploymentObject()
 	if err = r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "web")}, deployment); err != nil {
