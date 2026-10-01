@@ -55,7 +55,7 @@ Sender campaigns, backup и отдельная очередь email не зап�
 - Worker удерживает неблокирующий `flock` на
   `<uploads>/.bitrix-operator-agents.lock` до выхода процесса, включая shutdown handlers.
   Файл нельзя удалять/заменять во время работы. Конкурирующий worker пропускает цикл.
-- SIGTERM запрещает следующие циклы и ждёт активного worker. Pod имеет grace period
+- SIGTERM/SIGINT и SIGQUIT (stop signal PHP-FPM image) запрещают следующие циклы и ждёт активного worker. Pod имеет grace period
   30 секунд; после него Kubernetes может оборвать выполнение. Долгие агенты должны
   быть идемпотентными и корректно переживать прерывание.
 - Heartbeat supervisor отделён от исполнения агента: длинный агент не вызывает
@@ -77,7 +77,8 @@ partition/failover storage не имеет fencing-защиты. Exactly-once н
 Envtest проверяет singleton drift, повторную инициализацию reconciler, interval,
 release/agent toggle, текущую generation, collision и удаление при отсутствующем
 Secret. Native container tests проверяют интервал, конкуренцию двух schedulers,
-ошибку worker, отключение, graceful stop и restart на закреплённом PHP image.
+ошибку worker, отключение, graceful stop и restart на закреплённом PHP image. Отдельный `docker stop`
+проверяет image stop signal с wrapper в PID 1 и завершением активного агента.
 Kind E2E проверяет mounts, FPM agent mode, выполнение, отключение агента и удаление
 workload. Его статический RWX volume работает на одном узле: это не тест NFS/CSI
 при сетевом разделении. Fixture содержит синтетические CAgent/COption, а не

@@ -3,7 +3,7 @@
 set -eu
 stop_file="/tmp/cron-stop-$$"
 rm -f "$stop_file"
-trap 'touch "$stop_file"' TERM INT
+trap 'touch "$stop_file"' TERM INT QUIT
 php /run/bitrix-config/scheduler.php "$stop_file" &
 scheduler=$!
 result=0
