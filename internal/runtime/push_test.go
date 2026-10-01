@@ -66,7 +66,7 @@ func testPushContainers(t *testing.T) {
 		t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", name).Run() })
 	}
 	// Synthetic test password; production uses a projected Secret file.
-	password := "push-test-password"
+	password := "push-test-\"quote\\\nпароль"
 	redis := prefix + "-redis"
 	start(redis, "run", "--rm", "-d", "--name", redis, "--network", network, "--network-alias", "redis", "redis:8.2.10-alpine", "redis-server", "--requirepass", password, "--save", "", "--appendonly", "no")
 	s := pushSpec(t)
@@ -82,7 +82,7 @@ func testPushContainers(t *testing.T) {
 		for _, item := range p.Secret.Items {
 			value := password
 			if p.Secret.Name == s.Runtime.Push.SecretRef.Name {
-				value = strings.Repeat("k", 64)
+				value = "\ufeffquote\"\\\nключ" + strings.Repeat("k", 64)
 			}
 			secrets[item.Path] = value
 		}

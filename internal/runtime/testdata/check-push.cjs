@@ -6,6 +6,12 @@ const fs = require('node:fs');
 const WS = require('/opt/push-server/node_modules/ws');
 const models = require('/opt/push-server/lib/models');
 const config = JSON.parse(fs.readFileSync('/tmp/push/config.json', 'utf8'));
+const manifest = JSON.parse(fs.readFileSync('/run/push-config/manifest.json', 'utf8'));
+// JSON conversion must preserve exact UTF-8 bytes, including BOM, quotes and whitespace.
+if (!Buffer.from(config.security.key).equals(fs.readFileSync(manifest.keyFile)) ||
+    !Buffer.from(config.storage.password).equals(fs.readFileSync(manifest.redis.passwordFile))) {
+  throw new Error('Secret bytes changed during JSON serialization');
+}
 const key = config.security.key;
 const pub = process.argv[2] || 'http://publisher:9010';
 const subs = (process.argv[3] || 'http://subscriber:8010,http://subscriber2:8010').split(',');

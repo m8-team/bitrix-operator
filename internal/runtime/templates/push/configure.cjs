@@ -9,7 +9,7 @@ try {
     if (!/^\/run\/bitrix-secrets\/[a-f0-9]{64}$/.test(path)) throw new Error();
     const value = fs.readFileSync(path);
     if (!value.length || value.length > 1048576) throw new Error();
-    return new TextDecoder('utf-8', {fatal: true}).decode(value);
+    return new TextDecoder('utf-8', {fatal: true, ignoreBOM: true}).decode(value);
   };
   const config = JSON.parse(fs.readFileSync(__dirname + '/' + role + '.json', 'utf8'));
   config.security.key = readSecret(manifest.keyFile);
