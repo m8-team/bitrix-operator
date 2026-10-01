@@ -13,6 +13,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/util/csaupgrade"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -60,6 +63,19 @@ func (r *BitrixClusterReconciler) apply(ctx context.Context, c *bx.BitrixCluster
 	}
 	if !existing.GetDeletionTimestamp().IsZero() {
 		return block("ResourceDeleting", "An application resource is being deleted")
+	}
+	// Create uses an Update managed-fields entry. ForceOwnership alone does not
+	// remove its shared ownership of unchanged fields, so later omissions could
+	// leave stale limits, pull secrets or volume settings behind. Migrate only
+	// our own entry with the official client-go helper and its RV precondition.
+	patch, err := csaupgrade.UpgradeManagedFieldsPatch(existing, sets.New("bitrix-operator"), "bitrix-operator")
+	if err != nil {
+		return err
+	}
+	if patch != nil {
+		if err = r.Patch(ctx, existing, client.RawPatch(types.JSONPatchType, patch)); err != nil {
+			return err
+		}
 	}
 	desired.SetResourceVersion(existing.GetResourceVersion())
 	// These fields are controlled by the operator. Force only on an owned object,

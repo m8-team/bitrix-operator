@@ -349,6 +349,13 @@ nginx/FPM/INI/PHP конфигураций в Go-строках нет; тест
 Отдельно запланировать pruning неиспользуемых immutable ConfigMap, процедуру
 recovery retained PVC и site-validation Job; `Ready` до последнего остаётся False.
 
+### 3.1. Корректное удаление полей SSA
+
+- Исправить передачу владения Create/Update → Apply для ресурсов оператора.
+- Проверить удаление resource limits/requests, миграцию существующих ресурсов,
+  сохранение посторонних полей и идемпотентность после миграции.
+- Сохранить guards owner UID/resourceVersion; CRD и файловые шаблоны не меняются.
+
 ### 4. Cron и agents
 
 - Singleton Deployment Recreate, image PHP из runtime.web.php.
