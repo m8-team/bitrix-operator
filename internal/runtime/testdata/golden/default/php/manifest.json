@@ -1,4 +1,9 @@
 {
+  "push": {
+    "enabled": false,
+    "publisher": "",
+    "keyFile": ""
+  },
   "cron": {
     "enabled": false,
     "agents": false,

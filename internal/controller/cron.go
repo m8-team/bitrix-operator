@@ -25,7 +25,7 @@ func (r *BitrixClusterReconciler) deleteCron(ctx context.Context, c *bx.BitrixCl
 		return err
 	}
 	owner := metav1.GetControllerOf(d)
-	if owner == nil || owner.UID != c.UID || owner.Kind != "BitrixCluster" || owner.APIVersion != bx.GroupVersion.String() {
+	if owner == nil || owner.UID != c.UID || owner.Kind != bitrixClusterKind || owner.APIVersion != bx.GroupVersion.String() {
 		return block("ResourceCollision", "The cron Deployment is not controlled by this BitrixCluster")
 	}
 	if d.DeletionTimestamp.IsZero() {
@@ -51,8 +51,8 @@ func (r *BitrixClusterReconciler) reconcileCron(ctx context.Context, c *bx.Bitri
 		condition(c, "CronReady", metav1.ConditionTrue, "RolloutComplete", "The desired cron replica is ready and uploads storage is bound")
 	}
 	for _, status := range s.Conditions {
-		if s.ObservedGeneration >= d.Generation && status.Type == appsv1.DeploymentProgressing && status.Status == corev1.ConditionFalse && status.Reason == "ProgressDeadlineExceeded" {
-			return block("ProgressDeadlineExceeded", "The cron Deployment exceeded its rollout deadline")
+		if s.ObservedGeneration >= d.Generation && status.Type == appsv1.DeploymentProgressing && status.Status == corev1.ConditionFalse && status.Reason == progressDeadlineExceeded {
+			return block(progressDeadlineExceeded, "The cron Deployment exceeded its rollout deadline")
 		}
 	}
 	return nil

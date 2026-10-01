@@ -52,5 +52,7 @@ return static function (array $base, array $extra, string $directory = __DIR__):
     $crypto = $settings['crypto']['value'] ?? [];
     $crypto['crypto_key'] = $readSecret($m['crypto']);
     $settings['crypto'] = ['value' => $crypto, 'readonly' => true];
+    $pull = require $directory . '/pull.php';
+    $settings['pull'] = ['value' => $pull($m['push'], $readSecret), 'readonly' => true];
     return $settings;
 };

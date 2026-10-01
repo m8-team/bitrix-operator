@@ -21,6 +21,9 @@ cleanup() {
                 kubectl -n bitrix-web-test logs "deployment/$name-web" -c "$container" --tail=50 || true
             done
         done
+        for role in publisher subscriber; do
+            kubectl -n bitrix-web-test logs "deployment/postgresql-push-$role" -c "$role" --tail=50 || true
+        done
         kubectl -n bitrix-web-test logs deployment/cron-cron -c cron --tail=50 || true
     fi
     kind delete cluster --name "$cluster"
@@ -116,6 +119,7 @@ kubectl -n bitrix-web-test exec deployment/cron-web -c php -- sh -ec 'test ! -e 
 kubectl -n bitrix-web-test patch bitrixcluster/cron --type=merge -p '{"spec":{"runtime":{"cron":{"enabled":false}}}}'
 kubectl -n bitrix-web-test wait deployment/cron-cron --for=delete --timeout=120s
 kubectl -n bitrix-web-test wait bitrixcluster/cron --for=jsonpath='{.status.conditions[?(@.type=="CronReady")].reason}'=Disabled --timeout=120s
+source test/e2e/web/push.sh
 # Data survives CR deletion; a new CR with the same name cannot adopt it silently.
 echo "Checking retained PVC and refusal to adopt it"
 pvc_uid=$(kubectl -n bitrix-web-test get pvc/mysql-uploads -o jsonpath='{.metadata.uid}')

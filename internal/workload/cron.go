@@ -11,7 +11,7 @@ import (
 
 // Cron has a distinct selector: web's existing immutable selector must never match cron Pods.
 func Cron(c *bx.BitrixCluster, b *render.Bundle, revision, image string) *apps.DeploymentApplyConfiguration {
-	labels := map[string]string{"app.kubernetes.io/name": "bitrix-cron", OwnerUID: string(c.UID)}
+	labels := map[string]string{appNameLabel: "bitrix-cron", OwnerUID: string(c.UID)}
 	pod := phpPod(c, b, image)
 	php := &pod.Containers[0]
 	php.WithName("cron")

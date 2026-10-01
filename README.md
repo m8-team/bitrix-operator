@@ -2,7 +2,7 @@
 
 Kubernetes operator для коробочного портала и сайтов Bitrix.
 
-**Итерация 3: web workloads и storage.** Оператор создаёт nginx/PHP Deployment,
+**Итерация 5: Push & Pull.** Оператор создаёт nginx/PHP Deployment,
 HTTP Service, retained uploads PVC и versioned конфиги из родных файловых шаблонов.
 Поддержаны внешние MySQL/PostgreSQL и Redis, Secret rotation и статусы rollout.
 [Запуск и ограничения](docs/web-workloads.md). `WebReady` отражает работу web;
@@ -79,7 +79,9 @@ CI: форматирование, Go modules, build/vet/lint, API contract, envt
 проверки и kind E2E для web/storage с внешними MySQL/PostgreSQL/Redis.
 Cron/agents реализованы отдельным singleton Deployment с native PHP scheduler.
 Требования к RWX, подготовке Bitrix и гарантии блокировки — [cron и agents](docs/cron-agents.md).
-Push, HPA, Gateway/TLS, site validation и публикация operator image — следующие итерации.
+Push publisher/subscriber, nginx WebSocket/long polling, signed REST и ротация ключа
+реализованы; [включение и границы доверия](docs/push-pull.md).
+HPA, Gateway/TLS, site validation и публикация operator image — следующие итерации.
 См. также [web workloads](docs/web-workloads.md).
 
 Лицензия: [Apache-2.0](LICENSE).

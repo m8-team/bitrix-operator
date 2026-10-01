@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   runtime:
-    name: nginx and PHP runtime
+    name: nginx, PHP and Push runtime
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -22,7 +22,7 @@ jobs:
           go-version-file: go.mod
       - name: Build controlled release fixture
         run: docker build -f test/fixtures/runtime/Dockerfile -t bitrix-runtime-fixture .
-      - name: Validate syntax, extensions, settings preservation and Secret handling
+      - name: Validate native configs, settings, Secrets and Push protocol
         env:
           BITRIX_RUNTIME_CONTAINER_TESTS: "1"
         run: go test -count=1 -v ./internal/runtime

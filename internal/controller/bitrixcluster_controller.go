@@ -45,7 +45,9 @@ type BitrixClusterReconciler struct {
 // +kubebuilder:rbac:groups=bitrix.m8.team,resources=bitrixclusters,verbs=get;list;watch
 // +kubebuilder:rbac:groups=bitrix.m8.team,resources=bitrixclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;patch;delete
-// +kubebuilder:rbac:groups="",resources=services;configmaps,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
 // +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch
@@ -80,6 +82,7 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		c.Status.Runtime.Cron.DesiredReplicas = 1
 		condition(c, "CronReady", metav1.ConditionFalse, "RolloutPending", "Waiting for the desired cron rollout")
 	}
+	initializePushStatus(c)
 	condition(c, "StorageReady", metav1.ConditionUnknown, "NotObserved", "Uploads storage has not been observed")
 	err := r.reconcileResources(ctx, c)
 	result := ctrl.Result{}
@@ -99,6 +102,9 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		c.Status.Phase = bx.BitrixClusterPhaseDegraded
 		condition(c, "Ready", metav1.ConditionFalse, reason, message)
 		condition(c, "WebReady", metav1.ConditionFalse, reason, message)
+		if pushEnabled(c) || reason == "PushStopping" {
+			condition(c, "PushReady", metav1.ConditionFalse, reason, message)
+		}
 		if c.Spec.Runtime.Cron.Enabled || reason == "CronStopping" {
 			condition(c, "CronReady", metav1.ConditionFalse, reason, message)
 		}
@@ -120,9 +126,9 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 func validateWorkload(c *bx.BitrixCluster) error {
 	s := c.Spec
-	if (s.Runtime.Push != nil && s.Runtime.Push.Enabled) || (s.Runtime.Web.Autoscaling != nil && s.Runtime.Web.Autoscaling.Enabled) ||
+	if (s.Runtime.Web.Autoscaling != nil && s.Runtime.Web.Autoscaling.Enabled) ||
 		(s.Networking != nil && s.Networking.Gateway != nil && s.Networking.Gateway.Enabled) {
-		return block("UnsupportedFeatures", "Push, autoscaling and Gateway publication are not implemented yet")
+		return block("UnsupportedFeatures", "Autoscaling and Gateway publication are not implemented yet")
 	}
 	for _, site := range s.Sites {
 		if site.TLS != nil {
@@ -142,15 +148,13 @@ func validateWorkload(c *bx.BitrixCluster) error {
 func deploymentObject() *appsv1.Deployment { return &appsv1.Deployment{} }
 
 func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.BitrixCluster) error {
-	if !c.Spec.Runtime.Cron.Enabled {
-		if err := r.deleteCron(ctx, c); err != nil {
-			return err
-		}
+	if err := r.deleteDisabledRuntime(ctx, c); err != nil {
+		return err
 	}
 	if err := validateWorkload(c); err != nil {
 		return err
 	}
-	b, err := render.Render(c.Spec)
+	b, err := render.Render(c.Spec, workload.PushEndpoints(c))
 	if err != nil {
 		return block("InvalidRuntimeConfiguration", err.Error())
 	}
@@ -172,6 +176,11 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.
 	}
 	for _, configuration := range workload.ConfigMaps(c, b) {
 		if err = r.apply(ctx, c, configuration); err != nil {
+			return err
+		}
+	}
+	if pushEnabled(c) {
+		if err = r.reconcilePush(ctx, c, b, revision); err != nil {
 			return err
 		}
 	}
@@ -198,8 +207,22 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.
 		c.Status.Release = &bx.ReleaseStatus{Repository: c.Spec.Release.Image.Repository, Tag: c.Spec.Release.Image.Tag, Digest: c.Spec.Release.Image.Digest}
 	}
 	for _, status := range d.Conditions {
-		if d.ObservedGeneration >= deployment.Generation && status.Type == appsv1.DeploymentProgressing && status.Status == corev1.ConditionFalse && status.Reason == "ProgressDeadlineExceeded" {
-			return block("ProgressDeadlineExceeded", "The web Deployment exceeded its rollout deadline")
+		if d.ObservedGeneration >= deployment.Generation && status.Type == appsv1.DeploymentProgressing && status.Status == corev1.ConditionFalse && status.Reason == progressDeadlineExceeded {
+			return block(progressDeadlineExceeded, "The web Deployment exceeded its rollout deadline")
+		}
+	}
+	return nil
+}
+
+func (r *BitrixClusterReconciler) deleteDisabledRuntime(ctx context.Context, c *bx.BitrixCluster) error {
+	if !c.Spec.Runtime.Cron.Enabled {
+		if err := r.deleteCron(ctx, c); err != nil {
+			return err
+		}
+	}
+	if !pushEnabled(c) {
+		if err := r.deletePush(ctx, c); err != nil {
+			return err
 		}
 	}
 	return nil
