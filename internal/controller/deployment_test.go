@@ -53,12 +53,13 @@ var _ = Describe("Controller helpers", func() {
 			Name: "portal",
 			UID:  types.UID("cluster-uid"),
 		}}
+		controller := true
 		d := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{{
 			APIVersion: bx.GroupVersion.String(),
 			Kind:       bitrixClusterKind,
 			Name:       c.Name,
 			UID:        c.UID,
-			Controller: ptr(true),
+			Controller: &controller,
 		}}}}
 		Expect(controlledByCluster(c, d)).To(BeTrue())
 		d.OwnerReferences[0].UID = types.UID("other")
@@ -66,6 +67,3 @@ var _ = Describe("Controller helpers", func() {
 	})
 })
 
-func ptr[T any](value T) *T {
-	return &value
-}
