@@ -56,7 +56,8 @@ nginx не пишет access logs для URL с channel tokens. Upstreams исп
 и shared zones; startup читает resolver и первый search suffix из Pod resolv.conf
 (`ClusterFirst`), поэтому cluster domain не зашит как `cluster.local`. Эти два runtime
 DNS tokens заменяет shell после проверки допустимых символов; Secret values там нет.
-HTTP/HTTPS и WS/WSS пути задаются с `#DOMAIN#`; Gateway/TLS ещё не реализованы.
+HTTP/HTTPS и WS/WSS пути задаются с `#DOMAIN#`; публикация через Gateway/TLS
+описана в [отдельном руководстве](gateway-tls.md).
 
 ## Граница доверия
 

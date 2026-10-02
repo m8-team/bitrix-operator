@@ -96,9 +96,17 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	condition(c, "StorageReady", metav1.ConditionUnknown, "NotObserved", "Uploads storage has not been observed")
 	err := r.reconcileResources(ctx, c)
-	if gatewayErr := r.reconcileGateway(ctx, c, err == nil); gatewayErr != nil {
-		condition(c, "GatewayReady", metav1.ConditionFalse, "PublicationFailed", "Could not reconcile Gateway publication")
-		err = errors.Join(err, gatewayErr)
+	gatewayErr := r.reconcileGateway(ctx, c, err == nil)
+	if gatewayErr != nil {
+		reason, message := "PublicationFailed", "Could not reconcile Gateway publication"
+		if issue, ok := errors.AsType[*blocked](gatewayErr); ok {
+			reason, message = issue.reason, issue.message
+			gatewayErr = nil
+		} else if apierrors.IsConflict(gatewayErr) || apierrors.IsAlreadyExists(gatewayErr) {
+			reason, message = "ResourceConflict", "A Gateway publication resource changed concurrently"
+			gatewayErr = nil
+		}
+		condition(c, "GatewayReady", metav1.ConditionFalse, reason, message)
 	}
 	result := ctrl.Result{RequeueAfter: 30 * time.Second}
 	if err == nil {
@@ -139,7 +147,7 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			return ctrl.Result{}, patchErr
 		}
 	}
-	return result, err
+	return result, errors.Join(err, gatewayErr)
 }
 
 func validateWorkload(c *bx.BitrixCluster) error {

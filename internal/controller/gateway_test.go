@@ -235,6 +235,23 @@ var _ = Describe("Gateway publication", func() {
 		Expect(publicationReason(c)).To(Equal("RoutePending"))
 	})
 
+	It("reports route ownership collisions without changing healthy web status", func() {
+		c := reconcileWeb(webSample())
+		gatewaySample(c)
+		foreign := workload.HTTPRoute(c, c.Spec.Sites[0])
+		foreign.OwnerReferences = nil
+		foreign.Spec.ParentRefs[0].Name = "different-gateway"
+		Expect(k8sClient.Create(ctx, foreign)).To(Succeed())
+		reconcilePublished(c)
+		markWebReady(c)
+		reconcilePublished(c)
+		Expect(publicationReason(c)).To(Equal("ResourceCollision"))
+		Expect(meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady")).To(BeTrue())
+		Expect(meta.IsStatusConditionTrue(c.Status.Conditions, "Ready")).To(BeFalse())
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(foreign), foreign)).To(Succeed())
+		Expect(foreign.OwnerReferences).To(BeEmpty())
+	})
+
 	It("rejects a conflicting external wildcard route without adopting it", func() {
 		c := reconcileWeb(webSample())
 		gatewaySample(c)
