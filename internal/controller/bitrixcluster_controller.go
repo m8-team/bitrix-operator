@@ -26,6 +26,7 @@ import (
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	render "github.com/m8-team/bitrix-operator/internal/runtime"
 	"github.com/m8-team/bitrix-operator/internal/workload"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
