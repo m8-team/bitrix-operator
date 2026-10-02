@@ -108,8 +108,7 @@ func readyReleasePod(p *corev1.Pod, image, phpImage string) bool {
 }
 
 func controlledJob(c *bx.BitrixCluster, j *batchv1.Job) bool {
-	o := metav1.GetControllerOf(j)
-	return o != nil && o.UID == c.UID && o.Kind == bitrixClusterKind && o.APIVersion == bx.GroupVersion.String()
+	return controlledByCluster(c, j)
 }
 
 func (r *BitrixClusterReconciler) deleteValidationJob(ctx context.Context, j *batchv1.Job) error {
