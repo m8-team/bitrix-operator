@@ -1,0 +1,11 @@
+{
+  "servers": [{"name": "subscriber", "hostname": "0.0.0.0", "port": 8010, "routes": {"sub": "/bitrix/subws/"}}],
+  "publishMode": false,
+  "clusterMode": true,
+  "cloudMode": false,
+  "dataDir": "/tmp/push/data",
+  "storage": {"type": "redis", "user": "default", "host": null, "port": null, "password": null, "messageTTL": 86400, "channelTTL": 86400, "onlineTTL": 120, "onlineDelta": 10},
+  "security": {"key": null, "algo": "sha256"},
+  "limits": {"maxPayload": 1048576, "maxConnPerChannel": 100, "maxMessagesPerRequest": 100, "maxChannelsPerRequest": 100},
+  "debug": {"folderName": "/tmp/push/logs", "ip": [], "trustProxy": false, "combineLogs": false}
+}

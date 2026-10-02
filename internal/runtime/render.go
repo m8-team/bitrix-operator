@@ -30,10 +30,12 @@ const (
 
 // Bundle contains no secret values. Keep PHP configuration separate from nginx mounts.
 type Bundle struct {
-	Nginx   map[string]string
-	PHP     map[string]string
-	Secrets []corev1.VolumeProjection
-	Hash    string
+	Nginx       map[string]string
+	PHP         map[string]string
+	Push        map[string]string
+	PushSecrets []corev1.VolumeProjection
+	Secrets     []corev1.VolumeProjection
+	Hash        string
 }
 
 type cronData struct {
@@ -43,7 +45,16 @@ type cronData struct {
 	UploadsPath     string  `json:"uploadsPath"`
 }
 
+type PushEndpoints struct{ Publisher, Subscriber string }
+
+type pushData struct {
+	Enabled   bool   `json:"enabled"`
+	Publisher string `json:"publisher"`
+	KeyFile   string `json:"keyFile"`
+}
+
 type manifest struct {
+	Push        pushData                  `json:"push"`
 	Cron        cronData                  `json:"cron"`
 	Version     string                    `json:"version"`
 	Engine      bitrixv1.DatabaseEngine   `json:"engine"`
@@ -74,7 +85,7 @@ type redisData struct {
 }
 
 // Render validates the runtime subset of an already API-validated spec and produces deterministic files.
-func Render(spec bitrixv1.BitrixClusterSpec) (*Bundle, error) {
+func Render(spec bitrixv1.BitrixClusterSpec, endpoints ...PushEndpoints) (*Bundle, error) {
 	hosts, err := validate(spec)
 	if err != nil {
 		return nil, err
@@ -116,17 +127,22 @@ func Render(spec bitrixv1.BitrixClusterSpec) (*Bundle, error) {
 			Host: c.Host + ":" + strconv.Itoa(int(c.Port)), Database: c.Database, Login: c.Username,
 			PasswordFile: password, Options: 2, InitCommand: initCommand(spec.Database.Engine, c.Options)}
 	}
+	pushFiles, pushSecrets, push, err := renderPush(spec, refs, endpoints)
+	if err != nil {
+		return nil, err
+	}
+	m.Push = push
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("encode runtime manifest: %w", err)
 	}
 	nginx, php, err := renderConfigs(configData{Hosts: hosts,
-		UploadsPath: spec.Storage.Uploads.MountPath, TemporaryPath: spec.Storage.Temporary.MountPath})
+		UploadsPath: spec.Storage.Uploads.MountPath, TemporaryPath: spec.Storage.Temporary.MountPath, PushEnabled: push.Enabled, PushPublisher: push.Publisher, PushSubscriber: pushSubscriber(endpoints)})
 	if err != nil {
 		return nil, err
 	}
 	php["manifest.json"] = string(data)
-	b := &Bundle{Nginx: nginx, PHP: php, Secrets: refs.projections()}
+	b := &Bundle{Nginx: nginx, PHP: php, Push: pushFiles, PushSecrets: pushSecrets, Secrets: refs.projections()}
 	// JSON sorts map keys; projections are explicitly sorted. No secret bytes enter this hash.
 	encoded, err := json.Marshal(b)
 	if err != nil {

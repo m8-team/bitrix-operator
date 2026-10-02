@@ -6,6 +6,10 @@
 | Файл | Назначение | Обработка |
 |---|---|---|
 | `nginx/nginx.conf.tmpl` | nginx HTTP/FastCGI, hosts, защита uploads | `text/template` |
+| `nginx/start.sh`, `nginx/resolver.conf` | проверка Pod DNS и подстановка runtime DNS tokens | побайтное копирование, startup substitution |
+| `push/publisher.json`, `push/subscriber.json` | native Push role configs | побайтное копирование, JSON serialization внутри Pod |
+| `push/configure.cjs`, `push/start.sh`, `push/health.cjs` | Secret files, startup и probes | побайтное копирование |
+| `push/pull.php` | PHP pull settings | побайтное копирование |
 | `php/php.ini.tmpl` | PHP options и временный каталог | `text/template` |
 | `php/php-fpm.conf` | FPM global/pool configuration | побайтное копирование |
 | `bitrix/settings.php` | PHP overlay connections/cache/session/crypto | побайтное копирование |
@@ -53,9 +57,14 @@
 
 | Наши файлы | Upstream path | Отличия для Kubernetes |
 |---|---|---|
-| `nginx/nginx.conf.tmpl` | `confs/nginx/conf.d/default.conf`, `confs/nginx/inc/block.conf` | порт 8080, PHP на loopback, явные hosts, default reject, temp paths в `/tmp`; сложные DAV/intranet/Push rewrites пока не перенесены |
+| `nginx/nginx.conf.tmpl` | `confs/nginx/conf.d/default.conf`, `confs/nginx/inc/block.conf` | порт 8080, PHP на loopback, явные hosts, default reject, temp paths в `/tmp`; сложные DAV/intranet rewrites пока не перенесены |
 | `php/php-fpm.conf` | `confs/php82/etc/php-fpm.conf`, `confs/php82/etc/php-fpm.d/www.conf`, `docker.conf`, `zz-docker.conf` | единый самостоятельный config, foreground, ondemand, non-root, clear_env; pool и global остаются вместе для сохранения текущего mount contract |
+| `nginx/start.sh`, `nginx/resolver.conf` | проверка Pod DNS и подстановка runtime DNS tokens | побайтное копирование, startup substitution |
+| `push/publisher.json`, `push/subscriber.json` | native Push role configs | побайтное копирование, JSON serialization внутри Pod |
+| `push/configure.cjs`, `push/start.sh`, `push/health.cjs` | Secret files, startup и probes | побайтное копирование |
+| `push/pull.php` | PHP pull settings | побайтное копирование |
 | `php/php.ini.tmpl` | `confs/php82/etc/php/conf.d/bitrixenv.ini` | PHP baseline, Secret-safe diagnostics, временный путь из CR; development/debug и локальные socket settings не переносятся |
+| `push/*`, nginx Push locations | `sources/bxpush33/{push-server-pub.json,push-server-sub.json,docker-entrypoint.sh}`, `confs/nginx/inc/push.conf` | самостоятельные JSON/PHP/helpers, projected Secret files, SHA-256, private pub + signed public REST, corrected TTL field names, non-root read-only filesystem |
 | `bitrix/*.php` | прямого аналога в выбранном snapshot нет | собственный release wrapper и Secret-file overlay; настройки сверяются с документацией Bitrix |
 
 Источники Bitrix:

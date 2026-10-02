@@ -2,7 +2,8 @@
 
 Дата проверки источников: 2026-09-30. Статус: итерация 3 — web workloads и storage реализованы;
 см. docs/web-workloads.md. Итерация 4 реализует cron и agents; см. docs/cron-agents.md.
-Следующий этап — итерация 5, Push & Pull.
+Итерация 5 реализует Push & Pull; см. docs/push-pull.md.
+Следующий этап — итерация 6, Sites, Gateway API и TLS.
 Репозиторий: https://github.com/m8-team/bitrix-operator
 Go module: github.com/m8-team/bitrix-operator
 
@@ -370,9 +371,10 @@ exactly-once и split-brain документированы.
 
 ### 5. Push & Pull
 
-- Publisher/subscriber Deployments/Services, Secret, Redis.
-- nginx websocket/long polling/protocol routes и app settings.
-- Раздельное масштабирование, probes, отключение и очистка owned resources.
+- [x] Publisher/subscriber Deployments/Services, Secret, Redis, NetworkPolicy.
+- [x] Родные JSON/PHP файлы, nginx websocket/long polling/protocol routes и app settings.
+- [x] Раздельное масштабирование, probes, отключение и очистка owned resources.
+- [x] Native protocol tests и kind lifecycle tests; ограничения CNI/Redis/rotation документированы.
 
 Готовность: подписка получает событие; проверяется подпись, reconnect,
 масштабирование и отсутствие публичного неавторизованного publish.

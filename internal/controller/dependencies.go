@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"slices"
 
+	"unicode/utf8"
+
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	render "github.com/m8-team/bitrix-operator/internal/runtime"
 	"github.com/m8-team/bitrix-operator/internal/workload"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -26,6 +29,9 @@ func secretNames(obj client.Object) []string {
 	names = append(names, c.Spec.License.SecretRef.Name, c.Spec.Crypto.SecretRef.Name, c.Spec.Redis.PasswordSecretRef.Name)
 	for _, connection := range c.Spec.Database.Connections {
 		names = append(names, connection.PasswordSecretRef.Name)
+	}
+	if p := c.Spec.Runtime.Push; p != nil && p.Enabled {
+		names = append(names, p.SecretRef.Name)
 	}
 	for _, ref := range c.Spec.Release.ImagePullSecrets {
 		names = append(names, ref.Name)
@@ -52,6 +58,12 @@ func (r *BitrixClusterReconciler) secrets(ctx context.Context, c *bx.BitrixClust
 						return "", block("SecretKeyInvalid", "A referenced Secret key is absent, empty or exceeds the size limit")
 					}
 				}
+			}
+		}
+		if p := c.Spec.Runtime.Push; p != nil && p.Enabled && p.SecretRef.Name == name {
+			value := secret.Data[p.SecretRef.Key]
+			if len(value) < 32 || len(value) > 512 || !utf8.Valid(value) {
+				return "", block("SecretKeyInvalid", "Push signing key must contain 32–512 bytes of valid UTF-8")
 			}
 		}
 		_, _ = fmt.Fprintf(hash, "%s\x00%s\x00%s\x00", name, secret.UID, secret.ResourceVersion)
@@ -98,7 +110,7 @@ func (r *BitrixClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 	return ctrl.NewControllerManagedBy(mgr).For(&bx.BitrixCluster{}).
-		Owns(deploymentObject()).Owns(&corev1.Service{}).Owns(&corev1.ConfigMap{}).
+		Owns(deploymentObject()).Owns(&corev1.Service{}).Owns(&corev1.ConfigMap{}).Owns(&networkingv1.NetworkPolicy{}).
 		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.dependencyRequests(secretIndex, true))).
 		Watches(&storagev1.StorageClass{}, handler.EnqueueRequestsFromMapFunc(r.dependencyRequests(storageClassIndex, false))).
 		Watches(&corev1.PersistentVolumeClaim{}, handler.EnqueueRequestsFromMapFunc(pvcRequest)).

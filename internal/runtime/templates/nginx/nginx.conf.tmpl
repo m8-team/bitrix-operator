@@ -14,6 +14,12 @@ http {
  scgi_temp_path /tmp/scgi;
  client_max_body_size 1024m;
  sendfile on;
+{{ if .PushEnabled }}
+ include /tmp/push-resolver.conf;
+ upstream bitrix_push_sub { zone bitrix_push_sub 64k; server {{ .PushSubscriber }}.@SEARCH@:8010 resolve; }
+ upstream bitrix_push_pub { zone bitrix_push_pub 64k; server {{ .PushPublisher }}.@SEARCH@:9010 resolve; }
+ map $http_upgrade $push_connection { default upgrade; '' close; }
+{{ end }}
  server {
   listen 8081;
   server_name _;
@@ -39,6 +45,32 @@ http {
   location ~* ^/bitrix/(?:license_key\.php|backup(?:/|$)|updates(?:/|$)) { deny all; }
   location ~* ^{{ .UploadsPath | nginxUploadsPattern }}/.*\.(?:php[0-9]*|phtml|phar)(?:/|$) { deny all; }
   location ~* \.(?:bak|sql|log|ini|conf|sh|dist)$ { deny all; }
+  # Never expose the trusted backend publication API or server statistics.
+  location ~* ^/bitrix/pub(?:/|$) { return 403; }
+  location ~* ^/server-stat(?:/|$) { return 403; }
+{{ if .PushEnabled }}
+  location = /bitrix/subws/ {
+   access_log off;
+   proxy_pass http://bitrix_push_sub;
+   proxy_http_version 1.1;
+   proxy_set_header Upgrade $http_upgrade;
+   proxy_set_header Connection $push_connection;
+   proxy_buffering off;
+   proxy_read_timeout 75s;
+  }
+  location = /bitrix/sub/ {
+   access_log off;
+   proxy_pass http://bitrix_push_sub/bitrix/subws/;
+   proxy_buffering off;
+   proxy_read_timeout 75s;
+  }
+  location = /bitrix/rest/ {
+   access_log off;
+   client_max_body_size 1m;
+   proxy_pass http://bitrix_push_pub;
+   proxy_read_timeout 25s;
+  }
+{{ end }}
   location / { try_files $uri $uri/ /bitrix/urlrewrite.php?$query_string; }
   location ~ \.php$ {
    try_files $uri =404;

@@ -40,7 +40,7 @@ func Name(c *bx.BitrixCluster, suffix string) string {
 	return base
 }
 func labels(c *bx.BitrixCluster) map[string]string {
-	return map[string]string{"app.kubernetes.io/name": "bitrix", OwnerUID: string(c.UID)}
+	return map[string]string{appNameLabel: "bitrix", OwnerUID: string(c.UID)}
 }
 func owner(c *bx.BitrixCluster) *meta.OwnerReferenceApplyConfiguration {
 	return meta.OwnerReference().WithAPIVersion(bx.GroupVersion.String()).WithKind("BitrixCluster").WithName(c.Name).WithUID(c.UID).WithController(true)
@@ -145,7 +145,7 @@ func Deployment(c *bx.BitrixCluster, b *render.Bundle, revision, image string) *
 	php := pod.Containers[0]
 	pod.Containers = nil
 	nginx := core.Container().WithName("nginx").WithImage(c.Spec.Runtime.Web.Nginx.Image).WithImagePullPolicy(corev1.PullIfNotPresent).
-		WithCommand("nginx", "-g", "daemon off;", "-c", "/run/nginx/nginx.conf").WithSecurityContext(security()).
+		WithCommand("/bin/sh", "/run/nginx/start.sh").WithSecurityContext(security()).
 		WithResources(resources(c.Spec.Runtime.Web.Nginx.Resources)).WithPorts(core.ContainerPort().WithName("http").WithContainerPort(8080)).
 		WithVolumeMounts(mount("code", render.Root, true), mount("uploads", c.Spec.Storage.Uploads.MountPath, true),
 			mount("nginx-config", "/run/nginx", true), mount("nginx-tmp", "/tmp", false)).

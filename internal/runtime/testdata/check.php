@@ -22,4 +22,16 @@ check($s['crypto']['value']['crypto_key'] === $secret);
 require '/run/bitrix-config/license_key.php';
 check($LICENSE_KEY === $secret);
 check((require '/opt/www/bitrix/.settings_extra.php') === []);
+$pull = $s['pull']['value'];
+check($s['pull']['readonly'] === true);
+check($pull['guest'] === 'N');
+if ($m['push']['enabled']) {
+    check($pull['signature_key'] === $secret);
+    check($pull['signature_algo'] === 'sha256');
+    check($pull['path_to_publish'] === 'http://publisher:9010/bitrix/pub/');
+    check($pull['path_to_websocket_secure'] === 'wss://#DOMAIN#/bitrix/subws/');
+    check($pull['enable_protobuf'] === 'Y');
+} else {
+    check($pull['nginx'] === 'N' && $pull['websocket'] === 'N' && $pull['push'] === 'N');
+}
 echo "runtime semantics OK\n";

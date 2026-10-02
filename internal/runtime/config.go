@@ -17,13 +17,16 @@ import (
 
 // Only native component files are embedded; documentation and golden files are excluded.
 //
-//go:embed templates/nginx/* templates/php/* templates/bitrix/* templates/cron/*
+//go:embed templates/nginx/* templates/php/* templates/bitrix/* templates/cron/* templates/push/*
 var configFiles embed.FS
 
 type configData struct {
-	Hosts         []string
-	UploadsPath   string
-	TemporaryPath string
+	PushEnabled    bool
+	PushPublisher  string
+	PushSubscriber string
+	Hosts          []string
+	UploadsPath    string
+	TemporaryPath  string
 }
 
 // renderConfigs has an explicit output list so build-only PHP files cannot become runtime mounts.
@@ -36,12 +39,15 @@ func renderConfigs(data configData) (map[string]string, map[string]string, error
 		target map[string]string
 	}{
 		{"nginx/nginx.conf.tmpl", "nginx.conf", nginx},
+		{"nginx/start.sh", "start.sh", nginx},
+		{"nginx/resolver.conf", "resolver.conf", nginx},
 		{"php/php-fpm.conf", "php-fpm.conf", php},
 		{"php/php.ini.tmpl", "php.ini", php},
 		{"bitrix/init-release.sh", "init-release.sh", php},
 		{"bitrix/fpm-live.php", "fpm-live.php", php},
 		{"bitrix/ready.php", "ready.php", php},
 		{"bitrix/settings.php", "settings.php", php},
+		{"push/pull.php", "pull.php", php},
 		{"bitrix/settings-wrapper.php", "settings-wrapper.php", php},
 		{"bitrix/license_key.php", "license_key.php", php},
 		{"cron/scheduler.php", "scheduler.php", php},

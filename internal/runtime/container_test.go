@@ -21,11 +21,12 @@ func TestRuntimeContainers(t *testing.T) {
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []string{"default", "separated"} {
+	for _, mode := range []string{"default", "separated", "push"} {
 		t.Run(mode, func(t *testing.T) { testPHPContainer(t, mode) })
 	}
 	t.Run("nginx", testNginxContainer)
 	t.Run("cron", testCronContainer)
+	t.Run("push", testPushContainers)
 }
 
 func writeFiles(t *testing.T, files map[string]string) string {
@@ -58,7 +59,10 @@ func containerArgs() []string {
 func testPHPContainer(t *testing.T, mode string) {
 	spec := sample(t)
 	spec.Redis.Sessions.Mode = mode
-	b, err := Render(spec)
+	if mode == "push" {
+		spec = pushSpec(t)
+	}
+	b, err := Render(spec, PushEndpoints{Publisher: "publisher", Subscriber: "subscriber"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +121,7 @@ nginx -c /run/nginx/nginx.conf
 trap 'nginx -c /run/nginx/nginx.conf -s quit' EXIT
 wget -q -O /tmp/body --header='Host: portal.example.com' http://127.0.0.1:8080/index.html
 grep -q 'public fixture' /tmp/body
-for uri in /.env /source.PHP /source.php.jpg /bitrix/license_key.php /bitrix/.settings.php /upload/evil.php /upload/evil.PHP /upload/evil.phtml; do
+for uri in /.env /source.PHP /source.php.jpg /bitrix/license_key.php /bitrix/.settings.php /upload/evil.php /upload/evil.PHP /upload/evil.phtml /bitrix/pub/ /bitrix/PUB/ /server-stat/; do
  if wget -S -O /tmp/body --header='Host: portal.example.com' "http://127.0.0.1:8080$uri" 2>/tmp/headers; then exit 1; fi
  grep -q '403 Forbidden' /tmp/headers
 done
