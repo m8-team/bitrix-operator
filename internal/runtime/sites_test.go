@@ -49,7 +49,7 @@ func testSitesContainer(t *testing.T) {
 				}
 			}
 			secrets := writeFiles(t, secretFiles)
-			identity := ValidationIdentity{ClusterUID: "fixture", Generation: 1, Release: "sha256:" + strings.Repeat("a", 64), Attempt: "fixture-job"}
+			identity := ValidationIdentity{ClusterUID: "fixture", Generation: 1, Release: "sha256:" + strings.Repeat("a", 64), PHP: "sha256:" + strings.Repeat("b", 64), Attempt: "fixture-job"}
 			data, _ := json.Marshal(identity)
 			args := append(containerArgs(), "-v", config+":"+ConfigRoot+":ro", "-v", secrets+":"+SecretRoot+":ro", "-e", "BITRIX_VALIDATION_IDENTITY="+string(data), "-e", "BITRIX_VALIDATION_ATTEMPT=fixture-job", "-e", "FIXTURE_SITE_MODE="+mode,
 				"--entrypoint=sh", "bitrix-runtime-fixture", "-ec", `php -d display_errors=0 -d log_errors=0 /run/bitrix-config/validate-sites.php >/tmp/stdout 2>/tmp/stderr || true; test ! -s /tmp/stdout; test ! -s /tmp/stderr; cat /tmp/site-result.json`)
