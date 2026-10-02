@@ -142,6 +142,11 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 		condition(c, "SitesValidated", metav1.ConditionUnknown, "RuntimeUnresolved", "Waiting for consistent release and PHP image digests in ready web Pods")
 		return nil
 	}
+	c.Status.Release = &bx.ReleaseStatus{
+		Repository: c.Spec.Release.Image.Repository,
+		Tag:        c.Spec.Release.Image.Tag,
+		Digest:     release,
+	}
 	name := workload.SiteValidationName(c, b, revision, release, php)
 	jobs := &batchv1.JobList{}
 	if err = r.reader().List(ctx, jobs, client.InNamespace(c.Namespace), client.MatchingLabels{workload.OwnerUID: string(c.UID), "app.kubernetes.io/name": "bitrix-sites"}); err != nil {
