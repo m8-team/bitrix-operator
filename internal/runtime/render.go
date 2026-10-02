@@ -2,6 +2,7 @@
 package runtime
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -54,6 +55,7 @@ type pushData struct {
 }
 
 type manifest struct {
+	Sites       []string                  `json:"sites"`
 	Push        pushData                  `json:"push"`
 	Cron        cronData                  `json:"cron"`
 	Version     string                    `json:"version"`
@@ -98,6 +100,10 @@ func Render(spec bitrixv1.BitrixClusterSpec, endpoints ...PushEndpoints) (*Bundl
 	m := manifest{Version: ContractVersion, Engine: spec.Database.Engine,
 		Connections: map[string]connectionData{}, SessionMode: spec.Redis.Sessions.Mode,
 		SessionTTL: spec.Redis.Sessions.TTL, CacheSID: spec.Redis.Cache.SID}
+	for _, site := range spec.Sites {
+		m.Sites = append(m.Sites, site.ID)
+	}
+	slices.Sort(m.Sites)
 	m.Cron = cronData{Enabled: cron.Enabled, UploadsPath: spec.Storage.Uploads.MountPath}
 	if cron.Agents != nil {
 		m.Cron.Agents = cron.Enabled && cron.Agents.Enabled
@@ -136,7 +142,13 @@ func Render(spec bitrixv1.BitrixClusterSpec, endpoints ...PushEndpoints) (*Bundl
 	if err != nil {
 		return nil, fmt.Errorf("encode runtime manifest: %w", err)
 	}
-	nginx, php, err := renderConfigs(configData{Hosts: hosts,
+	sites := slices.Clone(spec.Sites)
+	for i := range sites {
+		sites[i].Hosts = slices.Clone(sites[i].Hosts)
+		slices.Sort(sites[i].Hosts)
+	}
+	slices.SortFunc(sites, func(a, b bitrixv1.BitrixSiteSpec) int { return cmp.Compare(a.ID, b.ID) })
+	nginx, php, err := renderConfigs(configData{Hosts: hosts, Sites: sites,
 		UploadsPath: spec.Storage.Uploads.MountPath, TemporaryPath: spec.Storage.Temporary.MountPath, PushEnabled: push.Enabled, PushPublisher: push.Publisher, PushSubscriber: pushSubscriber(endpoints)})
 	if err != nil {
 		return nil, err
@@ -151,6 +163,8 @@ func Render(spec bitrixv1.BitrixClusterSpec, endpoints ...PushEndpoints) (*Bundl
 	b.Hash = fmt.Sprintf("%x", sha256.Sum256(encoded))
 	return b, nil
 }
+
+var siteIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`)
 
 var safeToken = regexp.MustCompile(`^[A-Za-z0-9_./:+-]+$`)
 var safeCharset = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
@@ -193,9 +207,18 @@ func validate(s bitrixv1.BitrixClusterSpec) ([]string, error) {
 	if !names["default"] {
 		return nil, fmt.Errorf("default database connection is required")
 	}
+	return validateSites(s.Sites)
+}
+
+func validateSites(sites []bitrixv1.BitrixSiteSpec) ([]string, error) {
 	hosts := []string{}
 	seen := map[string]bool{}
-	for _, site := range s.Sites {
+	ids := map[string]bool{}
+	for _, site := range sites {
+		if !siteIDPattern.MatchString(site.ID) || ids[site.ID] || len(site.Hosts) == 0 {
+			return nil, fmt.Errorf("invalid or duplicate site ID, or empty hosts")
+		}
+		ids[site.ID] = true
 		for _, host := range site.Hosts {
 			if len(validation.IsDNS1123Subdomain(host)) != 0 || net.ParseIP(host) != nil {
 				return nil, fmt.Errorf("site hosts must be lowercase DNS names")

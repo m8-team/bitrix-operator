@@ -44,6 +44,9 @@ type BitrixClusterReconciler struct {
 
 // +kubebuilder:rbac:groups=bitrix.m8.team,resources=bitrixclusters,verbs=get;list;watch
 // +kubebuilder:rbac:groups=bitrix.m8.team,resources=bitrixclusters/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=replicasets,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;patch
@@ -75,7 +78,7 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		c.Status.Sites = append(c.Status.Sites, bx.BitrixSiteStatus{ID: site.ID, Message: "Site existence has not been validated through the Bitrix kernel"})
 	}
 	condition(c, "Ready", metav1.ConditionFalse, "SiteValidationPending", "Web readiness does not validate Bitrix site IDs; kernel validation is pending")
-	condition(c, "SitesValidated", metav1.ConditionUnknown, "NotImplemented", "Kernel site validation will be implemented in a subsequent iteration")
+	condition(c, "SitesValidated", metav1.ConditionUnknown, "ValidationPending", "Waiting for site validation of the current runtime")
 	condition(c, "WebReady", metav1.ConditionFalse, "RolloutPending", "Waiting for the desired web rollout")
 	condition(c, "CronReady", metav1.ConditionTrue, "Disabled", "Cron workload is disabled")
 	if c.Spec.Runtime.Cron.Enabled {
@@ -85,7 +88,10 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	initializePushStatus(c)
 	condition(c, "StorageReady", metav1.ConditionUnknown, "NotObserved", "Uploads storage has not been observed")
 	err := r.reconcileResources(ctx, c)
-	result := ctrl.Result{}
+	result := ctrl.Result{RequeueAfter: 30 * time.Second}
+	if err == nil {
+		summarizeReadiness(c)
+	}
 	if err != nil {
 		reason, message := "ReconcileFailed", "Could not reconcile application resources; see controller logs"
 		if issue, ok := errors.AsType[*blocked](err); ok {
@@ -211,7 +217,7 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.
 			return block(progressDeadlineExceeded, "The web Deployment exceeded its rollout deadline")
 		}
 	}
-	return nil
+	return r.reconcileSites(ctx, c, b, revision, image)
 }
 
 func (r *BitrixClusterReconciler) deleteDisabledRuntime(ctx context.Context, c *bx.BitrixCluster) error {

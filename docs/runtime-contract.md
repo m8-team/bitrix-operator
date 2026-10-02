@@ -143,38 +143,30 @@ Uploads разрешены ниже `/opt/www`, вне `bitrix`/`local`; tempora
 согласовать с конкретным release до запуска приложения. FPM defaults (5 процессов,
 512M memory_limit) — baseline, не автоматическое вычисление из Pod resources.
 
-## Проверка site IDs: контракт следующей итерации
+## Проверка site IDs
 
-Одноразовый Job запускает PHP CLI того же release/runtime. Запрос содержит cluster
-UID, generation, resolved release digest, Job UID и запрошенные site IDs. Используется
-минимальный bootstrap ядра и read-only вызов `Bitrix\Main\SiteTable::getList`, без
-web prolog, агентов, сессий, installers и изменения БД. Нельзя считать произвольный
-bootstrap read-only: перед подключением release нужны тесты побочных эффектов и
-read-only DB session/role; пока это не доказано, `SitesValidated=False`.
+Реализована в итерации 6.1: [Sites — запуск, protocol, retries и ограничения](sites.md).
+PHP CLI загружает Loader и basic D7 kernel, использует read-only DB session и
+`Bitrix\Main\SiteTable::getList`; web prolog и agents не запускаются.
+Нативные файлы `bitrix/validate-sites.php`, `bitrix/settings.php` и
+`cron/web-prepend.php` входят в versioned ConfigMap. Публичный FastCGI запрос
+получает SITE_ID по таблице Host из CR; входной HTTP заголовок его не выбирает.
 
-Результат JSON записывается в termination message, до 4096 байт. Только protocol
-version, identity, найденные IDs из запроса и фиксированный reason:
-`Validated`, `SiteNotFound`, `ValidationUnavailable`. Пример:
+JSON termination message ограничен 4096 байт. Только protocol version, identity,
+найденные IDs из запроса и фиксированный reason. Identity содержит cluster UID,
+generation, наблюдаемый image digest и Job UID; имя Job включает также config hash
+и Secret revision. Пример:
 
 ```json
 {"version":"v1","identity":{"clusterUID":"uid","generation":3,"release":"sha256:<64 hex>","attempt":"job-uid"},"sites":["s1"],"reason":"Validated"}
 ```
 
-`ParseSiteResult` уже реализован и тестируется. Он отклоняет неизвестные поля,
-лишний JSON, несовпадающую identity, недопустимые reason, дубли/посторонние site IDs,
-неполный успешный результат и превышение размера. Контроллер дополнительно должен
-проверять owner UID, Job UID, exit code и успешное завершение контейнера; логи
-никогда не используются как результат. Число IDs следует разбивать на batch,
-чтобы каждый ответ укладывался в лимит. Нельзя обрезать JSON.
-
-Будущие параметры Job: backoffLimit=0, activeDeadlineSeconds=60,
-automountServiceAccountToken=false, без Kubernetes RBAC, read-only rootfs,
-TTL cleanup только после чтения результата. Timeout → `ValidationTimeout`, ошибка
-старта/формата/подключения → `ValidationUnavailable`, отсутствующие IDs →
-`SiteNotFound`; это reasons существующего Conditions, без новых CRD fields.
-Смена generation, digest или Job UID аннулирует результат. Никакого pods/exec из
-manager. Проверка существования ID не подтверждает привязку домена в настройках
-самого Bitrix — отдельный acceptance test должен покрыть multi-site routing.
+`ParseSiteResult` отклоняет неизвестные поля, лишний JSON, несовпадающую identity,
+неверные reasons, дубли/посторонние IDs и неполный результат. Контроллер проверяет
+owner UID, завершение Job/контейнера и фактический release imageID его init container.
+Логи и pods/exec не используются. Большой запрос пока получает ResultTooLarge;
+разбиение на batch остаётся отдельным улучшением, JSON никогда не обрезается.
+Настоящий лицензированный Bitrix smoke по-прежнему обязателен перед production.
 
 ## Запуск проверок
 

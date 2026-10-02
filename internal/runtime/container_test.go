@@ -26,6 +26,7 @@ func TestRuntimeContainers(t *testing.T) {
 	}
 	t.Run("nginx", testNginxContainer)
 	t.Run("cron", testCronContainer)
+	t.Run("sites", testSitesContainer)
 	t.Run("push", testPushContainers)
 }
 

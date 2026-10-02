@@ -23,10 +23,23 @@ return static function (array $base, array $extra, string $directory = __DIR__):
     }
     // Bitrix overlays extra configuration at section level. Preserve every unmanaged section.
     $settings = array_replace($base, $extra);
-    $connections = $settings['connections']['value'] ?? [];
+    $validation = defined('BITRIX_OPERATOR_VALIDATION') && BITRIX_OPERATOR_VALIDATION === true;
+    $connections = $validation ? [] : ($settings['connections']['value'] ?? []);
     foreach ($m['connections'] as $name => $connection) {
         $connection['password'] = $readSecret($connection['passwordFile']);
         unset($connection['passwordFile']);
+        if ($validation) {
+            // Guard every managed connection before any kernel query, including reconnects.
+            $connection['options'] = 0;
+            if ($m['engine'] === 'MySQL') {
+                $connection['initCommand'] = $connection['initCommand'] === ''
+                    ? 'SET SESSION transaction_read_only = 1'
+                    : $connection['initCommand'] . ', SESSION transaction_read_only = 1';
+            } else {
+                $connection['initCommand'] = ($connection['initCommand'] === '' ? '' : $connection['initCommand'] . '; ')
+                    . 'SET default_transaction_read_only = on';
+            }
+        }
         // Fully replace managed connections: stale socket, server and replica settings must not survive.
         $connections[$name] = $connection;
     }

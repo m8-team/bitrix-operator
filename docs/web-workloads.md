@@ -30,10 +30,9 @@ Liveness проверяет nginx и локальный listener PHP-FPM, не �
 Проверка FPM listener не гарантирует отсутствие зависших workers; полноценная проверка
 запроса происходит в readiness через FastCGI.
 
-Общий `Ready=False / SiteValidationPending` сохраняется: проверка site IDs через ядро
-Bitrix ещё не реализована. `SitesValidated=Unknown`, `sites[].exists` не утверждает
-существование сайта, URLs не объявляются опубликованными. `status.release` заполняется
-только после текущего успешного rollout; для tag-only release digest не выдумывается.
+Начиная с итерации 6.1 общий `Ready=True` требует также проверки site IDs через
+read-only D7 validation Job. `SitesValidated` и `sites[].exists` отражают результат
+для текущего rollout; подробности и ограничения — [Sites](sites.md).
 
 ## Storage и жизненный цикл
 

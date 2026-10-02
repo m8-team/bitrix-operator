@@ -1,4 +1,7 @@
 {
+  "sites": [
+    "s1"
+  ],
   "push": {
     "enabled": false,
     "publisher": "",

@@ -381,7 +381,8 @@ exactly-once и split-brain документированы.
 
 ### 6. Sites, Gateway API и TLS
 
-- Multi-site host routing и site existence validation.
+- [x] 6.1: Multi-site host routing, read-only D7 site validation Job, актуальные SitesValidated/Ready.
+- [ ] 6.2: Gateway API и TLS (пункты ниже), отдельный PR после 6.1.
 - HTTPRoute stable API; HTTP и HTTPS-сценарии.
 - Listener/certificate/ReferenceGrant checks без изменения общего Gateway.
 - Watches зависимостей и корректные URLs/status.
