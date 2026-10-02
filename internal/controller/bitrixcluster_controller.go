@@ -38,10 +38,14 @@ import (
 
 type BitrixClusterReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	APIReader client.Reader
+	Scheme              *runtime.Scheme
+	APIReader           client.Reader
+	GatewayAPIAvailable bool
 }
 
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways;gatewayclasses;referencegrants,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
 // +kubebuilder:rbac:groups=bitrix.m8.team,resources=bitrixclusters,verbs=get;list;watch
 // +kubebuilder:rbac:groups=bitrix.m8.team,resources=bitrixclusters/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;patch;delete
@@ -86,8 +90,24 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		condition(c, "CronReady", metav1.ConditionFalse, "RolloutPending", "Waiting for the desired cron rollout")
 	}
 	initializePushStatus(c)
+	condition(c, "GatewayReady", metav1.ConditionTrue, "Disabled", "Gateway publication is disabled")
+	if gatewayEnabled(c) {
+		condition(c, "GatewayReady", metav1.ConditionFalse, "PublicationPending", "Waiting for Gateway publication")
+	}
 	condition(c, "StorageReady", metav1.ConditionUnknown, "NotObserved", "Uploads storage has not been observed")
 	err := r.reconcileResources(ctx, c)
+	gatewayErr := r.reconcileGateway(ctx, c, err == nil)
+	if gatewayErr != nil {
+		reason, message := "PublicationFailed", "Could not reconcile Gateway publication"
+		if issue, ok := errors.AsType[*blocked](gatewayErr); ok {
+			reason, message = issue.reason, issue.message
+			gatewayErr = nil
+		} else if apierrors.IsConflict(gatewayErr) || apierrors.IsAlreadyExists(gatewayErr) {
+			reason, message = "ResourceConflict", "A Gateway publication resource changed concurrently"
+			gatewayErr = nil
+		}
+		condition(c, "GatewayReady", metav1.ConditionFalse, reason, message)
+	}
 	result := ctrl.Result{RequeueAfter: 30 * time.Second}
 	if err == nil {
 		summarizeReadiness(c)
@@ -127,20 +147,15 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 			return ctrl.Result{}, patchErr
 		}
 	}
-	return result, err
+	return result, errors.Join(err, gatewayErr)
 }
 
 func validateWorkload(c *bx.BitrixCluster) error {
 	s := c.Spec
-	if (s.Runtime.Web.Autoscaling != nil && s.Runtime.Web.Autoscaling.Enabled) ||
-		(s.Networking != nil && s.Networking.Gateway != nil && s.Networking.Gateway.Enabled) {
-		return block("UnsupportedFeatures", "Autoscaling and Gateway publication are not implemented yet")
+	if s.Runtime.Web.Autoscaling != nil && s.Runtime.Web.Autoscaling.Enabled {
+		return block("UnsupportedFeatures", "Autoscaling is not implemented yet")
 	}
-	for _, site := range s.Sites {
-		if site.TLS != nil {
-			return block("UnsupportedFeatures", "TLS publication is not implemented yet")
-		}
-	}
+
 	modes := s.Storage.Uploads.PersistentVolumeClaim.AccessModes
 	multiPod := s.Runtime.Web.Replicas > 1 || s.Runtime.Cron.Enabled
 	if slices.Contains(modes, corev1.ReadOnlyMany) {
@@ -167,7 +182,7 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.
 	if err := validateWorkload(c); err != nil {
 		return err
 	}
-	b, err := render.Render(c.Spec, workload.PushEndpoints(c))
+	b, err := render.RenderWithPort(c.Spec, r.publicationPort(ctx, c), workload.PushEndpoints(c))
 	if err != nil {
 		return block("InvalidRuntimeConfiguration", err.Error())
 	}

@@ -60,7 +60,7 @@ Reconcile имеет резервный интервал 30 секунд и watc
 `Ready=True` требует текущих StorageReady, WebReady, CronReady, PushReady и
 SitesValidated. Отключённые Cron/Push удовлетворяют своим Conditions как Disabled.
 Без Gateway `status.sites[].urls` пуст: наличие site ID не означает публичного URL.
-Gateway API, TLS, межкластерные host conflicts и публикация URLs — часть 6.2.
+Gateway API, TLS, конфликты hosts между BitrixCluster и публикация URLs — [часть 6.2](gateway-tls.md).
 BitrixCluster API/CRD не изменены.
 
 ## Проверки и пределы доказательств

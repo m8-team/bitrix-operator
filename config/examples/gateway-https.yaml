@@ -1,0 +1,44 @@
+# Infrastructure-owned example. Create namespaces, GatewayClass and TLS Secret first.
+# The BitrixCluster and portal-tls Secret are in namespace bitrix.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: shared
+  namespace: edge
+spec:
+  gatewayClassName: shared
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: portal.example.com
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            group: ""
+            name: portal-tls
+            namespace: bitrix
+      allowedRoutes:
+        kinds:
+          - kind: HTTPRoute
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              kubernetes.io/metadata.name: bitrix
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: ReferenceGrant
+metadata:
+  name: portal-certificate
+  namespace: bitrix
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      namespace: edge
+  to:
+    - group: ""
+      kind: Secret
+      name: portal-tls

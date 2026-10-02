@@ -22,13 +22,15 @@ import (
 var configFiles embed.FS
 
 type configData struct {
-	PushEnabled    bool
-	PushPublisher  string
-	PushSubscriber string
-	Hosts          []string
-	Sites          []bx.BitrixSiteSpec
-	UploadsPath    string
-	TemporaryPath  string
+	PublicationPort int32
+	GatewayEnabled  bool
+	PushEnabled     bool
+	PushPublisher   string
+	PushSubscriber  string
+	Hosts           []string
+	Sites           []bx.BitrixSiteSpec
+	UploadsPath     string
+	TemporaryPath   string
 }
 
 // renderConfigs has an explicit output list so build-only PHP files cannot become runtime mounts.

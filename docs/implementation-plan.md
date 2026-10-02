@@ -3,7 +3,7 @@
 Дата проверки источников: 2026-09-30. Статус: итерация 3 — web workloads и storage реализованы;
 см. docs/web-workloads.md. Итерация 4 реализует cron и agents; см. docs/cron-agents.md.
 Итерация 5 реализует Push & Pull; см. docs/push-pull.md.
-Следующий этап — итерация 6, Sites, Gateway API и TLS.
+Итерация 6: Sites, Gateway API и TLS реализована; следующий этап — итерация 7, autoscaling и эксплуатация.
 Репозиторий: https://github.com/m8-team/bitrix-operator
 Go module: github.com/m8-team/bitrix-operator
 
@@ -178,8 +178,8 @@ runtime.cron.enabled и agents.enabled имеют отдельную семан�
 TLS certificateRefs принадлежат Gateway listener, а не HTTPRoute.
 Оператор создает Routes, читает Gateway и проверяет соответствие sites[].tls
 сертификату listener. Общий Gateway не изменяется автоматически.
-Для HTTPS требуется sites[].tls и существующий kubernetes.io/tls Secret; для HTTP TLS
-не обязателен. При networking absent/disabled не создавать Gateway API resources.
+Для HTTPS требуется sites[].tls и существующий kubernetes.io/tls Secret; для HTTP поле
+TLS отсутствует. Явное sites[].tls с HTTP listener отклоняется, чтобы не понизить защиту молча. При networking absent/disabled не создавать Gateway API resources.
 
 При Gateway в другом namespace инфраструктура настраивает certificateRefs с namespace
 и ReferenceGrant в namespace сертификата, а также allowedRoutes.
@@ -382,7 +382,7 @@ exactly-once и split-brain документированы.
 ### 6. Sites, Gateway API и TLS
 
 - [x] 6.1: Multi-site host routing, read-only D7 site validation Job, актуальные SitesValidated/Ready.
-- [ ] 6.2: Gateway API и TLS (пункты ниже), отдельный PR после 6.1.
+- [x] 6.2: Gateway API v1.6.2 и TLS; [контракт, запуск и ограничения](gateway-tls.md).
 - HTTPRoute stable API; HTTP и HTTPS-сценарии.
 - Listener/certificate/ReferenceGrant checks без изменения общего Gateway.
 - Watches зависимостей и корректные URLs/status.

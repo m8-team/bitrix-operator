@@ -14,6 +14,8 @@ cleanup() {
     result=$?
     if [ "$result" -ne 0 ]; then
         kubectl get pods,pvc,bitrixclusters -A -o wide || true
+        kubectl get gateways,httproutes -A -o yaml || true
+        kubectl -n envoy-gateway-system logs deployment/envoy-gateway --tail=100 || true
         kubectl -n bitrix-web-test get events --sort-by=.lastTimestamp || true
         kubectl -n bitrix-operator-system logs deployment/bitrix-operator-controller-manager -c manager --tail=100 || true
         for name in mysql postgresql cron; do
@@ -122,6 +124,7 @@ kubectl -n bitrix-web-test patch bitrixcluster/cron --type=merge -p '{"spec":{"r
 kubectl -n bitrix-web-test wait deployment/cron-cron --for=delete --timeout=120s
 kubectl -n bitrix-web-test wait bitrixcluster/cron --for=jsonpath='{.status.conditions[?(@.type=="CronReady")].reason}'=Disabled --timeout=120s
 source test/e2e/web/push.sh
+source test/e2e/web/gateway.sh
 # Data survives CR deletion; a new CR with the same name cannot adopt it silently.
 echo "Checking retained PVC and refusal to adopt it"
 pvc_uid=$(kubectl -n bitrix-web-test get pvc/mysql-uploads -o jsonpath='{.metadata.uid}')

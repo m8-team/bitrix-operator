@@ -2,7 +2,7 @@
 
 Kubernetes operator для коробочного портала и сайтов Bitrix.
 
-**Итерация 5: Push & Pull.** Оператор создаёт nginx/PHP Deployment,
+**Итерация 6: Sites, Gateway API и TLS.** Оператор создаёт nginx/PHP Deployment,
 HTTP Service, retained uploads PVC и versioned конфиги из родных файловых шаблонов.
 Поддержаны внешние MySQL/PostgreSQL и Redis, Secret rotation и статусы rollout.
 [Запуск и ограничения](docs/web-workloads.md). `WebReady` отражает работу web;
@@ -58,7 +58,7 @@ kubectl get bitrixcluster example -o yaml
 
 Пример содержит ссылки на Secrets и внешние DB/Redis, но credentials в Git не хранит.
 Release image, StorageClass и endpoints нужно заменить своими значениями. `sites[].tls` необязателен; наличие HTTPS listener
-будет проверяться контроллером на этапе Gateway, а не текущей схемой.
+проверяется контроллером Gateway, а не текущей схемой.
 
 Чтобы запустить manager в кластере, соберите собственный образ:
 
@@ -83,7 +83,9 @@ Push publisher/subscriber, nginx WebSocket/long polling, signed REST и рота
 реализованы; [включение и границы доверия](docs/push-pull.md).
 Реализованы Host → SITE_ID, validation Jobs и проверка текущего runtime перед Ready;
 [контракт и ограничения проверки сайтов](docs/sites.md).
-HPA, Gateway/TLS и публикация operator image — следующие итерации.
+Реализованы HTTPRoute, Gateway/TLS, проверки сертификатов и ReferenceGrant;
+[подключение и ограничения публикации](docs/gateway-tls.md).
+HPA и публикация operator image — следующие итерации.
 См. также [web workloads](docs/web-workloads.md).
 
 Лицензия: [Apache-2.0](LICENSE).
