@@ -18,8 +18,12 @@ package controller
 
 import (
 	"context"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	gateway "sigs.k8s.io/gateway-api/apis/v1"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -61,11 +65,14 @@ var _ = BeforeSuite(func() {
 	err = bitrixv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	Expect(gateway.Install(scheme.Scheme)).To(Succeed())
 	// +kubebuilder:scaffold:scheme
 
 	By("bootstrapping test environment")
+	module, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", "sigs.k8s.io/gateway-api").Output()
+	Expect(err).NotTo(HaveOccurred())
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases"), filepath.Join(strings.TrimSpace(string(module)), "config", "crd", "standard")},
 		ErrorIfCRDPathMissing: true,
 	}
 

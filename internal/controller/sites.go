@@ -277,7 +277,7 @@ func (r *BitrixClusterReconciler) siteResult(ctx context.Context, c *bx.BitrixCl
 }
 
 func summarizeReadiness(c *bx.BitrixCluster) {
-	for _, kind := range []string{"StorageReady", "WebReady", "CronReady", "PushReady", "SitesValidated"} {
+	for _, kind := range []string{"StorageReady", "WebReady", "CronReady", "PushReady", "SitesValidated", "GatewayReady"} {
 		status := meta.FindStatusCondition(c.Status.Conditions, kind)
 		if status == nil || status.Status != metav1.ConditionTrue || status.ObservedGeneration != c.Generation {
 			reason, message := "ComponentsPending", "Waiting for required components"

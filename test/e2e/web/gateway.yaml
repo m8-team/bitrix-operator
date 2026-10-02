@@ -1,0 +1,39 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: bitrix-e2e
+  namespace: envoy-gateway-system
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: ClusterIP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: bitrix-e2e
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: bitrix-e2e
+  namespace: envoy-gateway-system
+spec:
+  gatewayClassName: bitrix-e2e
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: bitrix-e2e
+  listeners:
+    - name: web
+      protocol: HTTP
+      port: 80
+      hostname: portal.example.com
+      allowedRoutes:
+        namespaces:
+          from: All

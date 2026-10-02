@@ -88,6 +88,11 @@ type redisData struct {
 
 // Render validates the runtime subset of an already API-validated spec and produces deterministic files.
 func Render(spec bitrixv1.BitrixClusterSpec, endpoints ...PushEndpoints) (*Bundle, error) {
+	return RenderWithPort(spec, 0, endpoints...)
+}
+
+// RenderWithPort includes the external listener port in native FastCGI settings.
+func RenderWithPort(spec bitrixv1.BitrixClusterSpec, port int32, endpoints ...PushEndpoints) (*Bundle, error) {
 	hosts, err := validate(spec)
 	if err != nil {
 		return nil, err
@@ -148,7 +153,7 @@ func Render(spec bitrixv1.BitrixClusterSpec, endpoints ...PushEndpoints) (*Bundl
 		slices.Sort(sites[i].Hosts)
 	}
 	slices.SortFunc(sites, func(a, b bitrixv1.BitrixSiteSpec) int { return cmp.Compare(a.ID, b.ID) })
-	nginx, php, err := renderConfigs(configData{Hosts: hosts, Sites: sites,
+	nginx, php, err := renderConfigs(configData{Hosts: hosts, Sites: sites, PublicationPort: port, GatewayEnabled: spec.Networking != nil && spec.Networking.Gateway != nil && spec.Networking.Gateway.Enabled,
 		UploadsPath: spec.Storage.Uploads.MountPath, TemporaryPath: spec.Storage.Temporary.MountPath, PushEnabled: push.Enabled, PushPublisher: push.Publisher, PushSubscriber: pushSubscriber(endpoints)})
 	if err != nil {
 		return nil, err

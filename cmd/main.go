@@ -37,6 +37,7 @@ import (
 
 	bitrixv1alpha1 "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	"github.com/m8-team/bitrix-operator/internal/controller"
+	gateway "sigs.k8s.io/gateway-api/apis/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -49,6 +50,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(bitrixv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(gateway.Install(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

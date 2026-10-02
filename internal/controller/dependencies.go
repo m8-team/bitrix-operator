@@ -19,6 +19,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	gateway "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 const secretIndex = "bitrix.dependencies.secrets"
@@ -107,7 +108,7 @@ func pvcRequest(_ context.Context, obj client.Object) []ctrl.Request {
 // SetupWithManager uses metadata-only Secret watches, keeping credential data out of the shared cache.
 func (r *BitrixClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.APIReader = mgr.GetAPIReader()
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &bx.BitrixCluster{}, secretIndex, secretNames); err != nil {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &bx.BitrixCluster{}, secretIndex, watchedSecrets); err != nil {
 		return err
 	}
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &bx.BitrixCluster{}, storageClassIndex, func(obj client.Object) []string {
@@ -115,11 +116,26 @@ func (r *BitrixClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}); err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(mgr).For(&bx.BitrixCluster{}).
+	available, err := gatewayAPIsAvailable(mgr.GetRESTMapper())
+	if err != nil {
+		return err
+	}
+	r.GatewayAPIAvailable = available
+	b := ctrl.NewControllerManagedBy(mgr).For(&bx.BitrixCluster{}).
 		Owns(&batchv1.Job{}).Owns(deploymentObject()).Owns(&corev1.Service{}).Owns(&corev1.ConfigMap{}).Owns(&networkingv1.NetworkPolicy{}).
 		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.dependencyRequests(secretIndex, true))).
 		Watches(&storagev1.StorageClass{}, handler.EnqueueRequestsFromMapFunc(r.dependencyRequests(storageClassIndex, false))).
 		Watches(&corev1.PersistentVolumeClaim{}, handler.EnqueueRequestsFromMapFunc(pvcRequest)).
 		Watches(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(pvcRequest)).
-		Named("bitrixcluster").Complete(r)
+		Named("bitrixcluster")
+	if available {
+		b = b.Owns(&gateway.HTTPRoute{}).
+			Watches(&gateway.HTTPRoute{}, handler.EnqueueRequestsFromMapFunc(r.gatewayRequests)).
+			Watches(&gateway.Gateway{}, handler.EnqueueRequestsFromMapFunc(r.gatewayRequests)).
+			Watches(&gateway.GatewayClass{}, handler.EnqueueRequestsFromMapFunc(r.gatewayRequests)).
+			Watches(&gateway.ReferenceGrant{}, handler.EnqueueRequestsFromMapFunc(r.gatewayRequests)).
+			WatchesMetadata(&corev1.Namespace{}, handler.EnqueueRequestsFromMapFunc(r.gatewayRequests)).
+			Watches(&bx.BitrixCluster{}, handler.EnqueueRequestsFromMapFunc(r.gatewayRequests))
+	}
+	return b.Complete(r)
 }
