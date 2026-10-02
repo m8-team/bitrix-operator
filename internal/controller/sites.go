@@ -34,18 +34,30 @@ func releaseDigest(p *corev1.Pod) string {
 	return ""
 }
 
-// Resolve the actual runtime image, including tag-only releases. Labels are hints;
+func containerDigest(p *corev1.Pod, name string) string {
+	for _, s := range p.Status.ContainerStatuses {
+		if s.Name == name {
+			if matches := imageDigest.FindStringSubmatch(s.ImageID); len(matches) == 2 {
+				return matches[1]
+			}
+		}
+	}
+	return ""
+}
+
+// Resolve the actual release and PHP runtime images, including tag-only references. Labels are hints;
 // the Deployment -> ReplicaSet -> Pod ownership chain is checked before using status.
-func (r *BitrixClusterReconciler) observedRelease(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision, image string) (string, error) {
+func (r *BitrixClusterReconciler) observedRuntimeDigests(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision, image string) (string, string, error) {
 	pods := &corev1.PodList{}
 	if err := r.reader().List(ctx, pods, client.InNamespace(c.Namespace), client.MatchingLabels{workload.OwnerUID: string(c.UID), "app.kubernetes.io/name": "bitrix"}); err != nil {
-		return "", err
+		return "", "", err
 	}
 	deployment := &appsv1.Deployment{}
 	if err := r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "web")}, deployment); err != nil {
-		return "", err
+		return "", "", err
 	}
-	digest := ""
+	release := ""
+	php := ""
 	observed := int32(0)
 	for _, p := range pods.Items {
 		if !p.DeletionTimestamp.IsZero() || p.Annotations[workload.ConfigHash] != b.Hash || p.Annotations[workload.SecretRevision] != revision {
@@ -63,26 +75,28 @@ func (r *BitrixClusterReconciler) observedRelease(ctx context.Context, c *bx.Bit
 			if apierrors.IsNotFound(err) {
 				continue
 			}
-			return "", err
+			return "", "", err
 		}
 		parent := metav1.GetControllerOf(rs)
 		if rs.UID != owner.UID || parent == nil || parent.UID != deployment.UID || parent.Kind != "Deployment" || parent.APIVersion != appsv1.SchemeGroupVersion.String() {
 			continue
 		}
 		observed++
-		found := releaseDigest(&p)
-		if found == "" {
-			return "", nil
+		foundRelease := releaseDigest(&p)
+		foundPHP := containerDigest(&p, "php")
+		if foundRelease == "" || foundPHP == "" {
+			return "", "", nil
 		}
-		if digest != "" && digest != found {
-			return "", nil
+		if (release != "" && release != foundRelease) || (php != "" && php != foundPHP) {
+			return "", "", nil
 		}
-		digest = found
+		release = foundRelease
+		php = foundPHP
 	}
 	if observed != c.Spec.Runtime.Web.Replicas {
-		return "", nil
+		return "", "", nil
 	}
-	return digest, nil
+	return release, php, nil
 }
 
 func readyReleasePod(p *corev1.Pod, image, phpImage string) bool {
@@ -120,15 +134,15 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 	if !meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") {
 		return nil
 	}
-	release, err := r.observedRelease(ctx, c, b, revision, image)
+	release, php, err := r.observedRuntimeDigests(ctx, c, b, revision, image)
 	if err != nil {
 		return err
 	}
-	if release == "" {
-		condition(c, "SitesValidated", metav1.ConditionUnknown, "ReleaseUnresolved", "Waiting for a consistent release image digest in ready web Pods")
+	if release == "" || php == "" {
+		condition(c, "SitesValidated", metav1.ConditionUnknown, "RuntimeUnresolved", "Waiting for consistent release and PHP image digests in ready web Pods")
 		return nil
 	}
-	name := workload.SiteValidationName(c, b, revision, release)
+	name := workload.SiteValidationName(c, b, revision, release, php)
 	jobs := &batchv1.JobList{}
 	if err = r.reader().List(ctx, jobs, client.InNamespace(c.Namespace), client.MatchingLabels{workload.OwnerUID: string(c.UID), "app.kubernetes.io/name": "bitrix-sites"}); err != nil {
 		return err
@@ -149,13 +163,13 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 	for _, s := range c.Spec.Sites {
 		requested = append(requested, s.ID)
 	}
-	identity := render.ValidationIdentity{ClusterUID: string(c.UID), Generation: c.Generation, Release: release, Attempt: "00000000-0000-0000-0000-000000000000"}
+	identity := render.ValidationIdentity{ClusterUID: string(c.UID), Generation: c.Generation, Release: release, PHP: php, Attempt: "00000000-0000-0000-0000-000000000000"}
 	encoded, _ := json.Marshal(render.SiteResult{Version: render.ContractVersion, Identity: identity, Sites: requested, Reason: sitesValidated})
 	if len(encoded) > 4096 {
 		condition(c, "SitesValidated", metav1.ConditionFalse, "ResultTooLarge", "Requested site IDs exceed the bounded validation result capacity")
 		return nil
 	}
-	if err = r.apply(ctx, c, workload.SiteValidation(c, b, revision, image, release)); err != nil {
+	if err = r.apply(ctx, c, workload.SiteValidation(c, b, revision, image, release, php)); err != nil {
 		return err
 	}
 	job := &batchv1.Job{}
@@ -237,7 +251,7 @@ func (r *BitrixClusterReconciler) siteResult(ctx context.Context, c *bx.BitrixCl
 		if owner == nil || owner.UID != job.UID || owner.Kind != "Job" || owner.APIVersion != batchv1.SchemeGroupVersion.String() || p.Status.Phase != corev1.PodSucceeded || !p.DeletionTimestamp.IsZero() {
 			continue
 		}
-		if releaseDigest(&p) != identity.Release {
+		if releaseDigest(&p) != identity.Release || containerDigest(&p, "php") != identity.PHP {
 			return unavailable, true, nil
 		}
 		for _, s := range p.Status.ContainerStatuses {
