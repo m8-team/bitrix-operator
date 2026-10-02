@@ -66,4 +66,3 @@ var _ = Describe("Controller helpers", func() {
 		Expect(controlledByCluster(c, d)).To(BeFalse())
 	})
 })
-
