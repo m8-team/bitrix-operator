@@ -81,7 +81,9 @@ Cron/agents реализованы отдельным singleton Deployment с na
 Требования к RWX, подготовке Bitrix и гарантии блокировки — [cron и agents](docs/cron-agents.md).
 Push publisher/subscriber, nginx WebSocket/long polling, signed REST и ротация ключа
 реализованы; [включение и границы доверия](docs/push-pull.md).
-HPA, Gateway/TLS, site validation и публикация operator image — следующие итерации.
+Реализованы Host → SITE_ID, validation Jobs и проверка текущего runtime перед Ready;
+[контракт и ограничения проверки сайтов](docs/sites.md).
+HPA, Gateway/TLS и публикация operator image — следующие итерации.
 См. также [web workloads](docs/web-workloads.md).
 
 Лицензия: [Apache-2.0](LICENSE).

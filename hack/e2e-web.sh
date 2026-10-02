@@ -51,7 +51,7 @@ for engine in MySQL PostgreSQL; do
 done
 for name in mysql postgresql; do
     kubectl -n bitrix-web-test wait "bitrixcluster/$name" --for=condition=WebReady --timeout=300s
-    test "$(kubectl -n bitrix-web-test get "bitrixcluster/$name" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')" = False
+    kubectl -n bitrix-web-test wait "bitrixcluster/$name" --for=condition=Ready --timeout=180s
     response=$(kubectl -n bitrix-web-test exec "deployment/$name-web" -c nginx -- \
         wget -qO- --header='Host: portal.example.com' "http://$name-web/")
     test "$response" = runtime-fixture
@@ -71,6 +71,7 @@ for name in mysql postgresql; do
         test ! -e /run/bitrix-config/manifest.json
     '
 done
+source test/e2e/web/sites.sh
 # Secret rotation must change the template and converge to ready replicas.
 echo "Checking Secret rotation and data persistence"
 old=$(kubectl -n bitrix-web-test get deployment/mysql-web -o jsonpath='{.spec.template.metadata.annotations.bitrix\.m8\.team/secret-revision}')

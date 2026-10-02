@@ -166,5 +166,5 @@ func Deployment(c *bx.BitrixCluster, b *render.Bundle, revision, image string) *
 	return apps.Deployment(Name(c, "web"), c.Namespace).WithLabels(labels(c)).WithOwnerReferences(owner(c)).
 		WithSpec(apps.DeploymentSpec().WithReplicas(replicas).WithRevisionHistoryLimit(2).WithProgressDeadlineSeconds(600).
 			WithStrategy(strategy).WithSelector(meta.LabelSelector().WithMatchLabels(labels(c))).
-			WithTemplate(core.PodTemplateSpec().WithLabels(labels(c)).WithAnnotations(map[string]string{ConfigHash: b.Hash, SecretRevision: revision}).WithSpec(pod)))
+			WithTemplate(core.PodTemplateSpec().WithLabels(labels(c)).WithAnnotations(map[string]string{ClusterName: c.Name, ConfigHash: b.Hash, SecretRevision: revision}).WithSpec(pod)))
 }

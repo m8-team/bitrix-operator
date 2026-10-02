@@ -11,6 +11,7 @@ import (
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	render "github.com/m8-team/bitrix-operator/internal/runtime"
 	"github.com/m8-team/bitrix-operator/internal/workload"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -110,9 +111,10 @@ func (r *BitrixClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 	return ctrl.NewControllerManagedBy(mgr).For(&bx.BitrixCluster{}).
-		Owns(deploymentObject()).Owns(&corev1.Service{}).Owns(&corev1.ConfigMap{}).Owns(&networkingv1.NetworkPolicy{}).
+		Owns(&batchv1.Job{}).Owns(deploymentObject()).Owns(&corev1.Service{}).Owns(&corev1.ConfigMap{}).Owns(&networkingv1.NetworkPolicy{}).
 		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.dependencyRequests(secretIndex, true))).
 		Watches(&storagev1.StorageClass{}, handler.EnqueueRequestsFromMapFunc(r.dependencyRequests(storageClassIndex, false))).
 		Watches(&corev1.PersistentVolumeClaim{}, handler.EnqueueRequestsFromMapFunc(pvcRequest)).
+		Watches(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(pvcRequest)).
 		Named("bitrixcluster").Complete(r)
 }

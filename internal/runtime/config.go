@@ -12,6 +12,7 @@ import (
 	"strings"
 	"text/template"
 
+	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -25,6 +26,7 @@ type configData struct {
 	PushPublisher  string
 	PushSubscriber string
 	Hosts          []string
+	Sites          []bx.BitrixSiteSpec
 	UploadsPath    string
 	TemporaryPath  string
 }
@@ -46,6 +48,7 @@ func renderConfigs(data configData) (map[string]string, map[string]string, error
 		{"bitrix/init-release.sh", "init-release.sh", php},
 		{"bitrix/fpm-live.php", "fpm-live.php", php},
 		{"bitrix/ready.php", "ready.php", php},
+		{"bitrix/validate-sites.php", "validate-sites.php", php},
 		{"bitrix/settings.php", "settings.php", php},
 		{"push/pull.php", "pull.php", php},
 		{"bitrix/settings-wrapper.php", "settings-wrapper.php", php},

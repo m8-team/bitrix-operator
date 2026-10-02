@@ -65,6 +65,7 @@
 | `push/pull.php` | PHP pull settings | побайтное копирование |
 | `php/php.ini.tmpl` | `confs/php82/etc/php/conf.d/bitrixenv.ini` | PHP baseline, Secret-safe diagnostics, временный путь из CR; development/debug и локальные socket settings не переносятся |
 | `push/*`, nginx Push locations | `sources/bxpush33/{push-server-pub.json,push-server-sub.json,docker-entrypoint.sh}`, `confs/nginx/inc/push.conf` | самостоятельные JSON/PHP/helpers, projected Secret files, SHA-256, private pub + signed public REST, corrected TTL field names, non-root read-only filesystem |
+| `bitrix/validate-sites.php`, `cron/web-prepend.php` | [D7 basic kernel](https://dev.1c-bitrix.ru/api_d7/bitrix/main/application/initializebasickernel.php), [SITE_ID](https://dev.1c-bitrix.ru/api_help/main/general/pageplan.php) | bounded validation protocol, read-only DB session, Host → SITE_ID; Bitrix smoke требуется отдельно |
 | `bitrix/*.php` | прямого аналога в выбранном snapshot нет | собственный release wrapper и Secret-file overlay; настройки сверяются с документацией Bitrix |
 
 Источники Bitrix:
