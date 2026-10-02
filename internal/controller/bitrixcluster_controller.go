@@ -26,7 +26,6 @@ import (
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	render "github.com/m8-team/bitrix-operator/internal/runtime"
 	"github.com/m8-team/bitrix-operator/internal/workload"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -206,16 +205,14 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.
 		return err
 	}
 	desired := c.Spec.Runtime.Web.Replicas
-	d := deployment.Status
-	c.Status.Runtime.Web = bx.WorkloadStatus{DesiredReplicas: desired, ReadyReplicas: d.ReadyReplicas, UpdatedReplicas: d.UpdatedReplicas, AvailableReplicas: d.AvailableReplicas}
-	if d.ObservedGeneration >= deployment.Generation && d.UpdatedReplicas == desired && d.ReadyReplicas == desired && d.AvailableReplicas == desired && d.Replicas == desired && pvc.Status.Phase == corev1.ClaimBound {
+	rollout := observeDeployment(deployment, desired)
+	c.Status.Runtime.Web = rollout.status
+	if rollout.ready && pvc.Status.Phase == corev1.ClaimBound {
 		condition(c, "WebReady", metav1.ConditionTrue, "RolloutComplete", "The desired web replicas are ready and uploads storage is bound")
 		c.Status.Release = &bx.ReleaseStatus{Repository: c.Spec.Release.Image.Repository, Tag: c.Spec.Release.Image.Tag, Digest: c.Spec.Release.Image.Digest}
 	}
-	for _, status := range d.Conditions {
-		if d.ObservedGeneration >= deployment.Generation && status.Type == appsv1.DeploymentProgressing && status.Status == corev1.ConditionFalse && status.Reason == progressDeadlineExceeded {
-			return block(progressDeadlineExceeded, "The web Deployment exceeded its rollout deadline")
-		}
+	if rollout.deadlineExceeded {
+		return block(progressDeadlineExceeded, "The web Deployment exceeded its rollout deadline")
 	}
 	return r.reconcileSites(ctx, c, b, revision, image)
 }
