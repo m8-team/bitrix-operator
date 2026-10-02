@@ -1,5 +1,5 @@
 # Merge patch for an existing BitrixCluster. Create the referenced Secret separately.
-# Requires a NetworkPolicy-enforcing CNI and a Redis endpoint dedicated to this installation.
+# Apply push-default-deny.yaml first. Requires a NetworkPolicy-enforcing CNI and a Redis endpoint dedicated to this installation.
 spec:
   runtime:
     push:

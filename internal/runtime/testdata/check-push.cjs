@@ -18,6 +18,8 @@ const subs = (process.argv[3] || 'http://subscriber:8010,http://subscriber2:8010
 const rest = process.argv[4] || pub;
 const pollingPath = process.argv[5] || '/bitrix/subws/';
 const sockets = [];
+const requests = new Set();
+const timers = new Set();
 const sign = data => crypto.createHmac('sha256', key).update(data).digest();
 const channel = () => crypto.randomBytes(16).toString('hex');
 const assert = (condition, message) => {if (!condition) throw new Error(message);};
@@ -28,7 +30,9 @@ function request(url, method = 'GET', body = '') {
       response.on('data', data => chunks.push(data));
       response.on('end', () => resolve({status: response.statusCode, body: Buffer.concat(chunks).toString()}));
     });
-    r.setTimeout(8000, () => r.destroy(new Error('HTTP timeout')));
+    requests.add(r);
+    r.on('close', () => requests.delete(r));
+    r.setTimeout(8000, () => r.destroy(new Error('HTTP timeout: ' + new URL(url).pathname)));
     r.on('error', reject); r.end(body);
   });
 }
@@ -42,39 +46,50 @@ function connect(url, token) {
 }
 function message(ws, marker) {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Event not received')), 8000);
+    const timer = setTimeout(() => reject(new Error('Event not received: ' + marker.split('-')[0])), 8000);
+    timers.add(timer);
     ws.on('message', data => {if (data.toString().includes(marker)) {clearTimeout(timer); resolve();}});
   });
 }
 (async () => {
+  console.log('Push check: WebSocket fanout');
   const privateID = channel(), publicID = channel();
   const token = privateID + ':' + publicID + '.' + sign(privateID + ':' + publicID).toString('hex');
   const peers = await Promise.all(subs.map(url => connect(url, token)));
   const marker = 'fanout-' + channel();
   const deliveries = peers.map(ws => message(ws, marker));
-  assert((await request(pub + '/bitrix/pub/?CHANNEL_ID=' + privateID, 'POST', marker)).status === 200, 'Internal publish failed');
-  await Promise.all(deliveries);
+  const [published] = await Promise.all([request(pub + '/bitrix/pub/?CHANNEL_ID=' + privateID, 'POST', marker), ...deliveries]);
+  assert(published.status === 200, 'Internal publish failed');
+  console.log('Push check: reconnect');
   peers[0].terminate();
   const reconnected = await connect(subs[0], token);
   const next = 'reconnect-' + channel();
   const delivered = message(reconnected, next);
-  await request(pub + '/bitrix/pub/?CHANNEL_ID=' + privateID, 'POST', next);
-  await delivered;
+  await Promise.all([request(pub + '/bitrix/pub/?CHANNEL_ID=' + privateID, 'POST', next), delivered]);
+  console.log('Push check: long polling');
   const pollingID = channel();
   const polling = request(subs[0] + pollingPath + '?CHANNEL_ID=' + pollingID + '.' + sign(pollingID).toString('hex'));
-  // Establish the pending HTTP subscription before publishing its independent channel.
-  await new Promise(resolve => setTimeout(resolve, 150));
   const pollMarker = 'poll-' + channel();
-  await request(pub + '/bitrix/pub/?CHANNEL_ID=' + pollingID, 'POST', pollMarker);
-  const received = await polling;
+  const [received] = await Promise.all([polling, (async () => {
+    // Establish the pending HTTP subscription before publishing its independent channel.
+    await new Promise(resolve => setTimeout(resolve, 150));
+    return request(pub + '/bitrix/pub/?CHANNEL_ID=' + pollingID, 'POST', pollMarker);
+  })()]);
   assert(received.status === 200 && received.body.includes(pollMarker), 'Long polling failed');
+  console.log('Push check: invalid subscription signature');
   assert((await request(subs[0] + '/bitrix/subws/?CHANNEL_ID=' + channel() + '.' + '0'.repeat(64))).status === 400, 'Invalid subscription signature accepted');
   const restMarker = 'rest-' + channel();
   const payload = signature => models.RequestBatch.encode({requests: [{incomingMessages: {messages: [{receivers: [{id: Buffer.from(publicID, 'hex'), isPrivate: false, signature}], body: restMarker}]}}]}).finish();
   const restURL = rest + '/bitrix/rest/?CHANNEL_ID=' + token;
+  console.log('Push check: invalid REST signature');
   assert((await request(restURL, 'POST', payload(Buffer.alloc(32)))).status === 400, 'Invalid REST receiver signature accepted');
+  console.log('Push check: signed REST');
   const restEvent = message(reconnected, restMarker);
-  assert((await request(restURL, 'POST', payload(sign('public:' + publicID)))).status === 200, 'Signed REST publish failed');
-  await restEvent;
+  const [restResult] = await Promise.all([request(restURL, 'POST', payload(sign('public:' + publicID))), restEvent]);
+  assert(restResult.status === 200, 'Signed REST publish failed');
   console.log('Push protocol OK: fanout, reconnect, polling, HMAC and signed REST');
-})().catch(error => {console.error(error.message); process.exitCode = 1;}).finally(() => {for (const ws of sockets) ws.terminate();});
+})().catch(error => {console.error(error.message); process.exitCode = 1;}).finally(() => {
+  for (const timer of timers) clearTimeout(timer);
+  for (const r of requests) r.destroy();
+  for (const ws of sockets) ws.terminate();
+});

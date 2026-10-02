@@ -101,7 +101,7 @@ func testPushContainers(t *testing.T) {
 				args[i] = "--network=" + network
 			}
 		}
-		args = append(args, "-d", "--name", name, "--network-alias", alias, "-v", config+":/run/push-config:ro", "-v", secretDir+":"+SecretRoot+":ro", "--entrypoint=/bin/sh", pushImage, "/run/push-config/start.sh", role)
+		args = append(args, "-d", "--name", name, "--network-alias", alias, "--network-alias", alias+".bitrix.test", "-v", config+":/run/push-config:ro", "-v", secretDir+":"+SecretRoot+":ro", "--entrypoint=/bin/sh", pushImage, "/run/push-config/start.sh", role)
 		start(name, args...)
 		deadline := time.Now().Add(40 * time.Second)
 		for exec.Command("docker", "exec", name, "node", "/run/push-config/health.cjs", "ready").Run() != nil {
@@ -117,6 +117,28 @@ func testPushContainers(t *testing.T) {
 	}
 	if !strings.Contains(docker(t, "exec", publisher, "node", "/run/push-config/check-push.cjs"), "Push protocol OK") {
 		t.Fatal("missing protocol result")
+	}
+	// Exercise the same native nginx startup and routes as Kubernetes, using Docker DNS.
+	nginxConfig := writeFiles(t, b.Nginx)
+	nginxName := prefix + "-nginx"
+	args := containerArgs()
+	for i := range args {
+		if args[i] == "--network=none" {
+			args[i] = "--network=" + network
+		}
+	}
+	args = append(args, "-d", "--name", nginxName, "--network-alias", "nginx", "--dns-search", "bitrix.test", "-v", nginxConfig+":/run/nginx:ro", "--entrypoint=/bin/sh", nginxImage, "/run/nginx/start.sh")
+	start(nginxName, args...)
+	deadline := time.Now().Add(20 * time.Second)
+	for exec.Command("docker", "exec", nginxName, "wget", "-qO-", "--header=Host: portal.example.com", "http://127.0.0.1:8080/_operator/health").Run() != nil {
+		if time.Now().After(deadline) {
+			t.Fatal("nginx did not become ready: " + docker(t, "logs", nginxName))
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	t.Log("Testing Push through native nginx proxy")
+	if !strings.Contains(docker(t, "exec", publisher, "node", "/run/push-config/check-push.cjs", "http://publisher:9010", "http://nginx:8080,http://nginx:8080", "http://nginx:8080", "/bitrix/sub/"), "Push protocol OK") {
+		t.Fatal("missing proxied protocol result")
 	}
 	// Missing Secret values fail closed with a generic diagnostic before starting the server.
 	for path := range secrets {

@@ -12,6 +12,7 @@ Deployments, ClusterIP Services и ingress NetworkPolicy. Существующи
 Примените [пример merge patch](../config/examples/push-patch.yaml):
 
 ```sh
+kubectl -n YOUR_NAMESPACE apply -f config/examples/push-default-deny.yaml
 kubectl -n YOUR_NAMESPACE patch bitrixcluster YOUR_CLUSTER --type=merge \
   --patch-file config/examples/push-patch.yaml
 kubectl -n YOUR_NAMESPACE wait bitrixcluster/YOUR_CLUSTER --for=condition=PushReady --timeout=300s
@@ -64,6 +65,15 @@ Upstream `/bitrix/pub/` в этом режиме **не проверяет по�
 варианты регистра. Publisher Service не публикуется наружу. NetworkPolicy разрешает
 publisher ingress только web/cron Pods этого BitrixCluster в том же namespace,
 subscriber — только его web Pods. Политика создаётся перед Deployment.
+
+Перед включением установите независимую инфраструктурную
+[default-deny policy](../config/examples/push-default-deny.yaml) для Push Pods.
+У неё намеренно нет ownerReference на BitrixCluster: при удалении CR garbage
+collector не гарантирует порядок удаления owned Pods и owned Policies. Постоянная
+baseline policy сохраняет ingress isolation после удаления разрешающих политик;
+не удаляйте её, пока в namespace остаются Push Pods. Дополнительные allow-политики
+оператора разрешают только нужные связи. Это следует из аддитивной модели
+[NetworkPolicy](https://kubernetes.io/docs/concepts/services-networking/network-policies/).
 
 Нужен CNI, который применяет NetworkPolicy. Сам факт создания ресурса не доказывает
 изоляцию; дополнительные allow-политики складываются с этой политикой. Пользователи,

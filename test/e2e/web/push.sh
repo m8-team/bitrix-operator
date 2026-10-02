@@ -2,6 +2,7 @@
 # Sourced only by hack/e2e-web.sh inside its own disposable kind cluster.
 # kindnet does not enforce NetworkPolicy: this covers API resources and protocol,
 # not CNI enforcement. The Node probe runs inside publisher to reuse upstream dependencies.
+kubectl -n bitrix-web-test apply -f config/examples/push-default-deny.yaml
 push_image=quay.io/bitrix24/push:3.3-v1-alpine@sha256:7ea0b71d66ab6cc9b0b58b6ba853d4398880fdfb1aa19b434a3bf462043bfecc
 kubectl -n bitrix-web-test create secret generic bitrix-push --from-literal=key=synthetic-signing-key-0123456789abcdef0123456789abcdef
 kubectl -n bitrix-web-test patch bitrixcluster/postgresql --type=merge -p \

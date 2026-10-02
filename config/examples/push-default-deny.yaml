@@ -1,0 +1,15 @@
+# Infrastructure-owned policy: apply in the application namespace BEFORE enabling Push.
+# Keep it independently of BitrixCluster so garbage collection cannot remove the
+# isolation baseline while Pods from a deleted CR are still terminating.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bitrix-push-default-deny
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [bitrix-push-publisher, bitrix-push-subscriber]
+  policyTypes: [Ingress]
+  ingress: []
