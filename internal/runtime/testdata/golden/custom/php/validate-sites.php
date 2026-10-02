@@ -29,6 +29,7 @@ try {
     define('BITRIX_OPERATOR_VALIDATION', true);
     // Basic D7 kernel only: no web prolog, init.php, agents, sessions or epilog.
     require $DOCUMENT_ROOT . '/bitrix/modules/main/lib/loader.php';
+    spl_autoload_register([\Bitrix\Main\Loader::class, 'autoLoad']);
     \Bitrix\Main\Loader::registerNamespace('Bitrix\\Main', $DOCUMENT_ROOT . '/bitrix/modules/main/lib');
     \Bitrix\Main\Application::getInstance()->initializeBasicKernel();
     $operatorConnection = \Bitrix\Main\Application::getConnection();

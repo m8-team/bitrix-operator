@@ -3,6 +3,7 @@
 namespace Bitrix\Main;
 class Loader
 {
+    public static function autoLoad(string $class): void {}
     public static function registerNamespace(string $name, string $directory): void {}
 }
 class Application

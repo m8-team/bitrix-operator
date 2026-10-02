@@ -26,7 +26,7 @@ type SiteResult struct {
 }
 
 // ParseSiteResult rejects stale, malformed, truncated and unexpected results.
-// The future Job reconciler must separately check owner UID and container exit status.
+// The Job reconciler separately checks owner UID, runtime imageID and container exit status.
 func ParseSiteResult(data []byte, expected ValidationIdentity, requested []string) (SiteResult, error) {
 	var result SiteResult
 	if len(data) == 0 || len(data) > 4096 {
