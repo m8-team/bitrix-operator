@@ -48,7 +48,7 @@ func TestNativeTemplateGolden(t *testing.T) {
 				t.Fatal(err)
 			}
 			if bundle.Hash+"\n" != string(hash) {
-				t.Fatal("runtime bundle differs from the reviewed rollout hash")
+				t.Fatalf("runtime bundle differs from the reviewed rollout hash: got %s, want %s", bundle.Hash, strings.TrimSpace(string(hash)))
 			}
 			if name == "custom" {
 				spec.Sites[0].Hosts[0], spec.Sites[0].Hosts[1] = spec.Sites[0].Hosts[1], spec.Sites[0].Hosts[0]

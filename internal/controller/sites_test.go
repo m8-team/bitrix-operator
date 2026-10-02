@@ -19,7 +19,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const siteTestDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+const siteTestReleaseDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+const siteTestPHPDigest = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
 func markWebReady(c *bx.BitrixCluster) {
 	p := uploads(c)
@@ -32,7 +33,7 @@ func markWebReady(c *bx.BitrixCluster) {
 	Expect(k8sClient.Create(ctx, rs)).To(Succeed())
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{GenerateName: "web-pod-", Namespace: c.Namespace, Labels: d.Spec.Template.Labels, Annotations: d.Spec.Template.Annotations, OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(rs, appsv1.SchemeGroupVersion.WithKind("ReplicaSet"))}}, Spec: d.Spec.Template.Spec}
 	Expect(k8sClient.Create(ctx, pod)).To(Succeed())
-	pod.Status = corev1.PodStatus{Phase: corev1.PodRunning, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}, InitContainerStatuses: []corev1.ContainerStatus{{Name: "release", ImageID: siteTestDigest, State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0}}}}}
+	pod.Status = corev1.PodStatus{Phase: corev1.PodRunning, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}, InitContainerStatuses: []corev1.ContainerStatus{{Name: "release", ImageID: siteTestReleaseDigest, State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0}}}}, ContainerStatuses: []corev1.ContainerStatus{{Name: "php", ImageID: siteTestPHPDigest}}}
 	Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
 }
 func validationJob(c *bx.BitrixCluster) *batchv1.Job {
@@ -42,12 +43,12 @@ func validationJob(c *bx.BitrixCluster) *batchv1.Job {
 	return &jobs.Items[0]
 }
 func finishValidation(c *bx.BitrixCluster, j *batchv1.Job, reason string, sites []string) *corev1.Pod {
-	result := render.SiteResult{Version: render.ContractVersion, Identity: render.ValidationIdentity{ClusterUID: string(c.UID), Generation: c.Generation, Release: siteTestDigest, Attempt: string(j.UID)}, Sites: sites, Reason: reason}
+	result := render.SiteResult{Version: render.ContractVersion, Identity: render.ValidationIdentity{ClusterUID: string(c.UID), Generation: c.Generation, Release: siteTestReleaseDigest, PHP: siteTestPHPDigest, Attempt: string(j.UID)}, Sites: sites, Reason: reason}
 	data, err := json.Marshal(result)
 	Expect(err).NotTo(HaveOccurred())
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{GenerateName: "validation-", Namespace: c.Namespace, Labels: j.Spec.Template.Labels, Annotations: j.Spec.Template.Annotations, OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(j, batchv1.SchemeGroupVersion.WithKind("Job"))}}, Spec: j.Spec.Template.Spec}
 	Expect(k8sClient.Create(ctx, pod)).To(Succeed())
-	pod.Status = corev1.PodStatus{Phase: corev1.PodSucceeded, InitContainerStatuses: []corev1.ContainerStatus{{Name: "release", ImageID: siteTestDigest, State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0}}}}, ContainerStatuses: []corev1.ContainerStatus{{Name: "php", State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0, Message: string(data)}}}}}
+	pod.Status = corev1.PodStatus{Phase: corev1.PodSucceeded, InitContainerStatuses: []corev1.ContainerStatus{{Name: "release", ImageID: siteTestReleaseDigest, State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0}}}}, ContainerStatuses: []corev1.ContainerStatus{{Name: "php", ImageID: siteTestPHPDigest, State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0, Message: string(data)}}}}}
 	Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
 	j.Status.Succeeded = 1
 	now := metav1.Now()
@@ -63,6 +64,8 @@ var _ = Describe("Site validation", func() {
 		c := reconcileWeb(webSample())
 		markWebReady(c)
 		reconcileWeb(c)
+		Expect(c.Status.Release).NotTo(BeNil())
+		Expect(c.Status.Release.Digest).To(Equal(siteTestReleaseDigest))
 		j := validationJob(c)
 		Expect(*j.Spec.ActiveDeadlineSeconds).To(Equal(int64(120)))
 		Expect(*j.Spec.BackoffLimit).To(BeZero())
@@ -108,7 +111,12 @@ var _ = Describe("Site validation", func() {
 		Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
 		reconcileWeb(c)
 		Expect(meta.IsStatusConditionTrue(c.Status.Conditions, "Ready")).To(BeFalse())
-		pod.Status.InitContainerStatuses[0].ImageID = siteTestDigest
+		pod.Status.InitContainerStatuses[0].ImageID = siteTestReleaseDigest
+		pod.Status.ContainerStatuses[0].ImageID = "sha256:" + strings.Repeat("c", 64)
+		Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+		reconcileWeb(c)
+		Expect(meta.IsStatusConditionTrue(c.Status.Conditions, "Ready")).To(BeFalse())
+		pod.Status.ContainerStatuses[0].ImageID = siteTestPHPDigest
 		pod.Status.ContainerStatuses[0].State.Terminated.ExitCode = 1
 		Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
 		reconcileWeb(c)

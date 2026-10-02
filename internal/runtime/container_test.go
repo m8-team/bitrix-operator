@@ -105,6 +105,15 @@ func testNginxContainer(t *testing.T) {
 	dir := writeFiles(t, b.Nginx)
 	args := append(containerArgs(), "-v", dir+":/run/nginx:ro", "--entrypoint=nginx", nginxImage, "-t", "-c", "/run/nginx/nginx.conf")
 	docker(t, args...)
+	longSpec := sample(t)
+	longSpec.Sites[0].Hosts = []string{strings.Repeat("a", 63) + "." + strings.Repeat("b", 63) + "." + strings.Repeat("c", 63) + "." + strings.Repeat("d", 50)}
+	longBundle, err := Render(longSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	longDir := writeFiles(t, longBundle.Nginx)
+	longArgs := append(containerArgs(), "-v", longDir+":/run/nginx:ro", "--entrypoint=nginx", nginxImage, "-t", "-c", "/run/nginx/nginx.conf")
+	docker(t, longArgs...)
 	// Exercise nginx location precedence: syntax checks alone cannot catch PHP source disclosure.
 	root := writeFiles(t, map[string]string{"index.html": "public fixture", ".env": "private fixture", "source.PHP": "private fixture", "source.php.jpg": "private fixture"})
 	for _, name := range []string{"bitrix", "upload"} {

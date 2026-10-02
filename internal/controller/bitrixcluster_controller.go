@@ -142,8 +142,15 @@ func validateWorkload(c *bx.BitrixCluster) error {
 		}
 	}
 	modes := s.Storage.Uploads.PersistentVolumeClaim.AccessModes
-	if slices.Contains(modes, corev1.ReadOnlyMany) || ((s.Runtime.Web.Replicas > 1 || s.Runtime.Cron.Enabled) && !slices.Contains(modes, corev1.ReadWriteMany)) {
-		return block("InvalidStorageMode", "Uploads require writable storage and ReadWriteMany for multiple web replicas or a separate cron workload")
+	multiPod := s.Runtime.Web.Replicas > 1 || s.Runtime.Cron.Enabled
+	if slices.Contains(modes, corev1.ReadOnlyMany) {
+		return block("InvalidStorageMode", "Uploads storage must be writable")
+	}
+	if slices.Contains(modes, corev1.ReadWriteOncePod) && (len(modes) != 1 || multiPod) {
+		return block("InvalidStorageMode", "ReadWriteOncePod must be the only uploads access mode and can be used only by a single web Pod without cron")
+	}
+	if multiPod && !slices.Contains(modes, corev1.ReadWriteMany) {
+		return block("InvalidStorageMode", "Uploads require ReadWriteMany for multiple web replicas or a separate cron workload")
 	}
 	if s.Storage.Uploads.PersistentVolumeClaim.Size.Sign() <= 0 || s.Storage.Temporary.SizeLimit.Sign() <= 0 {
 		return block("InvalidStorageSize", "Uploads and temporary storage sizes must be positive")
@@ -206,16 +213,14 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.
 		return err
 	}
 	desired := c.Spec.Runtime.Web.Replicas
-	d := deployment.Status
-	c.Status.Runtime.Web = bx.WorkloadStatus{DesiredReplicas: desired, ReadyReplicas: d.ReadyReplicas, UpdatedReplicas: d.UpdatedReplicas, AvailableReplicas: d.AvailableReplicas}
-	if d.ObservedGeneration >= deployment.Generation && d.UpdatedReplicas == desired && d.ReadyReplicas == desired && d.AvailableReplicas == desired && d.Replicas == desired && pvc.Status.Phase == corev1.ClaimBound {
+	rollout := observeDeployment(deployment, desired)
+	c.Status.Runtime.Web = rollout.status
+	if rollout.ready && pvc.Status.Phase == corev1.ClaimBound {
 		condition(c, "WebReady", metav1.ConditionTrue, "RolloutComplete", "The desired web replicas are ready and uploads storage is bound")
 		c.Status.Release = &bx.ReleaseStatus{Repository: c.Spec.Release.Image.Repository, Tag: c.Spec.Release.Image.Tag, Digest: c.Spec.Release.Image.Digest}
 	}
-	for _, status := range d.Conditions {
-		if d.ObservedGeneration >= deployment.Generation && status.Type == appsv1.DeploymentProgressing && status.Status == corev1.ConditionFalse && status.Reason == progressDeadlineExceeded {
-			return block(progressDeadlineExceeded, "The web Deployment exceeded its rollout deadline")
-		}
+	if rollout.deadlineExceeded {
+		return block(progressDeadlineExceeded, "The web Deployment exceeded its rollout deadline")
 	}
 	return r.reconcileSites(ctx, c, b, revision, image)
 }

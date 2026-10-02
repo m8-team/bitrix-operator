@@ -12,6 +12,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -224,6 +225,16 @@ var _ = Describe("Web and storage reconciliation", func() {
 		Expect(k8sClient.Update(ctx, c)).To(Succeed())
 		reconcileWeb(c)
 		Expect(meta.FindStatusCondition(c.Status.Conditions, "Ready").Reason).To(Equal("ImmutableStorage"))
+	})
+
+	It("rejects ReadWriteOncePod for a multi-Pod runtime even when ReadWriteMany is also present", func() {
+		c := webSample()
+		c.Spec.Runtime.Web.Replicas = 2
+		c.Spec.Storage.Uploads.PersistentVolumeClaim.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOncePod, corev1.ReadWriteMany}
+		Expect(k8sClient.Update(ctx, c)).To(Succeed())
+		reconcileWeb(c)
+		Expect(meta.FindStatusCondition(c.Status.Conditions, "Ready").Reason).To(Equal("InvalidStorageMode"))
+		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "web")}, &appsv1.Deployment{}))).To(BeTrue())
 	})
 
 	It("reconciles Secret metadata events through a real manager", func() {

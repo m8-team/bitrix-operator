@@ -9,11 +9,12 @@ import (
 )
 
 // ValidationIdentity prevents a finished Job from validating a newer rollout.
-// Release must be a resolved digest, never a mutable tag. Attempt is the Job UID.
+// Release and PHP must be resolved digests, never mutable tags. Attempt is the Job UID.
 type ValidationIdentity struct {
 	ClusterUID string `json:"clusterUID"`
 	Generation int64  `json:"generation"`
 	Release    string `json:"release"`
+	PHP        string `json:"php"`
 	Attempt    string `json:"attempt"`
 }
 
@@ -41,7 +42,8 @@ func ParseSiteResult(data []byte, expected ValidationIdentity, requested []strin
 	if dec.Decode(&trailing) != io.EOF {
 		return SiteResult{}, fmt.Errorf("trailing site result data")
 	}
-	if result.Version != ContractVersion || result.Identity != expected || expected.ClusterUID == "" || expected.Generation < 1 || expected.Attempt == "" || !digestPattern.MatchString(expected.Release) {
+	if result.Version != ContractVersion || result.Identity != expected || expected.ClusterUID == "" || expected.Generation < 1 || expected.Attempt == "" ||
+		!digestPattern.MatchString(expected.Release) || !digestPattern.MatchString(expected.PHP) {
 		return SiteResult{}, fmt.Errorf("stale or invalid site result identity")
 	}
 	if result.Reason != "Validated" && result.Reason != "SiteNotFound" && result.Reason != "ValidationUnavailable" {

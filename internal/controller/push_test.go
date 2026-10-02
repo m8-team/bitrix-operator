@@ -78,6 +78,16 @@ var _ = Describe("Push reconciliation", func() {
 		Expect(condition.Reason).To(Equal("SecretKeyInvalid"))
 		Expect(condition.Message).NotTo(ContainSubstring("invalid-secret-key"))
 		Expect(pushDeployment(c, "publisher").Spec.Template.Annotations[workload.SecretRevision]).To(Equal(current))
+		s.Data["key"] = []byte(strings.Repeat("s", 64))
+		Expect(k8sClient.Update(ctx, s)).To(Succeed())
+		redis := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: c.Spec.Redis.PasswordSecretRef.Name}, redis)).To(Succeed())
+		redis.Data[c.Spec.Redis.PasswordSecretRef.Key] = []byte{0xff, 0xfe}
+		Expect(k8sClient.Update(ctx, redis)).To(Succeed())
+		reconcileWeb(c)
+		condition = meta.FindStatusCondition(c.Status.Conditions, "PushReady")
+		Expect(condition.Reason).To(Equal("SecretKeyInvalid"))
+		Expect(condition.Message).NotTo(ContainSubstring(string([]byte{0xff, 0xfe})))
 	})
 	It("keeps ingress restrictions until foreground deletion completes, even when the Secret is missing", func() {
 		c := reconcileWeb(pushSample())
@@ -116,6 +126,8 @@ var _ = Describe("Push reconciliation", func() {
 		Expect(k8sClient.Update(ctx, c)).To(Succeed())
 		reconcileWeb(c)
 		Expect(meta.FindStatusCondition(c.Status.Conditions, "Ready").Reason).To(Equal("ResourceCollision"))
+		Expect(meta.FindStatusCondition(c.Status.Conditions, "PushReady").Reason).To(Equal("ResourceCollision"))
+		Expect(meta.IsStatusConditionFalse(c.Status.Conditions, "PushReady")).To(BeTrue())
 		Expect(pushDeployment(c, "publisher").DeletionTimestamp.IsZero()).To(BeTrue())
 	})
 })
