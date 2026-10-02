@@ -95,9 +95,11 @@ func (r *BitrixClusterReconciler) deletePushObject(ctx context.Context, c *bx.Bi
 		return false, nil
 	}
 	if err != nil {
+		condition(c, "PushReady", metav1.ConditionFalse, "CleanupFailed", "Could not inspect a Push resource during cleanup")
 		return false, err
 	}
 	if !controlledByCluster(c, obj) {
+		condition(c, "PushReady", metav1.ConditionFalse, "ResourceCollision", "A Push resource is not controlled by this BitrixCluster")
 		return true, block("ResourceCollision", "A Push resource is not controlled by this BitrixCluster")
 	}
 	if obj.GetDeletionTimestamp().IsZero() {
@@ -107,6 +109,7 @@ func (r *BitrixClusterReconciler) deletePushObject(ctx context.Context, c *bx.Bi
 			options = append(options, client.PropagationPolicy(metav1.DeletePropagationForeground))
 		}
 		if err = r.Delete(ctx, obj, options...); err != nil && !apierrors.IsNotFound(err) {
+			condition(c, "PushReady", metav1.ConditionFalse, "CleanupFailed", "Could not delete an owned Push resource")
 			return true, err
 		}
 	}

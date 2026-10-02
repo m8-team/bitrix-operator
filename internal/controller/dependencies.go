@@ -67,6 +67,11 @@ func (r *BitrixClusterReconciler) secrets(ctx context.Context, c *bx.BitrixClust
 				return "", block("SecretKeyInvalid", "Push signing key must contain 32–512 bytes of valid UTF-8")
 			}
 		}
+		if p := c.Spec.Runtime.Push; p != nil && p.Enabled && c.Spec.Redis.PasswordSecretRef.Name == name {
+			if !utf8.Valid(secret.Data[c.Spec.Redis.PasswordSecretRef.Key]) {
+				return "", block("SecretKeyInvalid", "Redis password must be valid UTF-8 while Push is enabled")
+			}
+		}
 		_, _ = fmt.Fprintf(hash, "%s\x00%s\x00%s\x00", name, secret.UID, secret.ResourceVersion)
 	}
 	return fmt.Sprintf("%x", hash.Sum(nil)), nil

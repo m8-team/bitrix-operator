@@ -142,8 +142,15 @@ func validateWorkload(c *bx.BitrixCluster) error {
 		}
 	}
 	modes := s.Storage.Uploads.PersistentVolumeClaim.AccessModes
-	if slices.Contains(modes, corev1.ReadOnlyMany) || ((s.Runtime.Web.Replicas > 1 || s.Runtime.Cron.Enabled) && !slices.Contains(modes, corev1.ReadWriteMany)) {
-		return block("InvalidStorageMode", "Uploads require writable storage and ReadWriteMany for multiple web replicas or a separate cron workload")
+	multiPod := s.Runtime.Web.Replicas > 1 || s.Runtime.Cron.Enabled
+	if slices.Contains(modes, corev1.ReadOnlyMany) {
+		return block("InvalidStorageMode", "Uploads storage must be writable")
+	}
+	if slices.Contains(modes, corev1.ReadWriteOncePod) && (len(modes) != 1 || multiPod) {
+		return block("InvalidStorageMode", "ReadWriteOncePod must be the only uploads access mode and can be used only by a single web Pod without cron")
+	}
+	if multiPod && !slices.Contains(modes, corev1.ReadWriteMany) {
+		return block("InvalidStorageMode", "Uploads require ReadWriteMany for multiple web replicas or a separate cron workload")
 	}
 	if s.Storage.Uploads.PersistentVolumeClaim.Size.Sign() <= 0 || s.Storage.Temporary.SizeLimit.Sign() <= 0 {
 		return block("InvalidStorageSize", "Uploads and temporary storage sizes must be positive")

@@ -132,6 +132,15 @@ func TestReleaseReference(t *testing.T) {
 	if err != nil || ref != image.Repository+":release" {
 		t.Fatal("tag reference failed")
 	}
+	image.Repository = "registry.example.com:5000/team/app"
+	ref, err = ReleaseReference(image)
+	if err != nil || ref != image.Repository+":release" {
+		t.Fatal("registry port was rejected")
+	}
+	image.Repository = "registry.example.com:5000/team/app:old"
+	if _, err = ReleaseReference(image); err == nil {
+		t.Fatal("repository with embedded tag accepted")
+	}
 }
 
 func TestSiteResults(t *testing.T) {
