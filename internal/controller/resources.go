@@ -11,7 +11,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -57,8 +56,7 @@ func (r *BitrixClusterReconciler) apply(ctx context.Context, c *bx.BitrixCluster
 	if err != nil {
 		return err
 	}
-	owner := metav1.GetControllerOf(existing)
-	if owner == nil || owner.UID != c.UID || owner.Kind != bitrixClusterKind || owner.APIVersion != bx.GroupVersion.String() {
+	if !controlledByCluster(c, existing) {
 		return block("ResourceCollision", fmt.Sprintf("%s %s is not controlled by this BitrixCluster", desired.GetKind(), desired.GetName()))
 	}
 	if !existing.GetDeletionTimestamp().IsZero() {
