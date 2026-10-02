@@ -7,7 +7,6 @@ import (
 	render "github.com/m8-team/bitrix-operator/internal/runtime"
 	"github.com/m8-team/bitrix-operator/internal/workload"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,8 +23,7 @@ func (r *BitrixClusterReconciler) deleteCron(ctx context.Context, c *bx.BitrixCl
 	if err != nil {
 		return err
 	}
-	owner := metav1.GetControllerOf(d)
-	if owner == nil || owner.UID != c.UID || owner.Kind != bitrixClusterKind || owner.APIVersion != bx.GroupVersion.String() {
+	if !controlledByCluster(c, d) {
 		return block("ResourceCollision", "The cron Deployment is not controlled by this BitrixCluster")
 	}
 	if d.DeletionTimestamp.IsZero() {
@@ -45,15 +43,13 @@ func (r *BitrixClusterReconciler) reconcileCron(ctx context.Context, c *bx.Bitri
 	if err := r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "cron")}, d); err != nil {
 		return err
 	}
-	s := d.Status
-	c.Status.Runtime.Cron = bx.WorkloadStatus{DesiredReplicas: 1, ReadyReplicas: s.ReadyReplicas, UpdatedReplicas: s.UpdatedReplicas, AvailableReplicas: s.AvailableReplicas}
-	if s.ObservedGeneration >= d.Generation && s.Replicas == 1 && s.ReadyReplicas == 1 && s.UpdatedReplicas == 1 && s.AvailableReplicas == 1 && bound {
+	rollout := observeDeployment(d, 1)
+	c.Status.Runtime.Cron = rollout.status
+	if rollout.ready && bound {
 		condition(c, "CronReady", metav1.ConditionTrue, "RolloutComplete", "The desired cron replica is ready and uploads storage is bound")
 	}
-	for _, status := range s.Conditions {
-		if s.ObservedGeneration >= d.Generation && status.Type == appsv1.DeploymentProgressing && status.Status == corev1.ConditionFalse && status.Reason == progressDeadlineExceeded {
-			return block(progressDeadlineExceeded, "The cron Deployment exceeded its rollout deadline")
-		}
+	if rollout.deadlineExceeded {
+		return block(progressDeadlineExceeded, "The cron Deployment exceeded its rollout deadline")
 	}
 	return nil
 }
