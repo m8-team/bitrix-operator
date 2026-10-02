@@ -21,6 +21,7 @@ cleanup() {
                 kubectl -n bitrix-web-test logs "deployment/$name-web" -c "$container" --tail=50 || true
             done
         done
+        kubectl -n bitrix-web-test logs pod/postgresql-push-client -c probe --tail=50 || true
         for role in publisher subscriber; do
             kubectl -n bitrix-web-test logs "deployment/postgresql-push-$role" -c "$role" --tail=50 || true
         done

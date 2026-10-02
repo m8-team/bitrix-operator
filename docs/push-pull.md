@@ -110,11 +110,13 @@ Versioned ConfigMaps пока остаются до удаления CR (pruning
   Redis authentication, fanout на два subscriber, reconnect, long polling,
   HMAC отказ и подписанный REST/protobuf.
 - Изолированный kind: nginx WebSocket/polling/REST, блокировка public publish,
-  scale 1/2 → 2/3, Secret rotation и отключение ресурсов.
+  scale 1/2 → 2/3, Secret rotation, запрещённые cross-role TCP connections и отключение ресурсов.
 
-Default kindnet **не обеспечивает NetworkPolicy enforcement**. Проверяются сами
-объекты/селекторы; подтверждение сетевой изоляции на выбранном production CNI остаётся
-отдельной инфраструктурной проверкой. Тесты не включают лицензированное ядро Bitrix:
+Закреплённый kind 0.33 включает kube-network-policies и применяет NetworkPolicy
+([поддержка появилась в 0.24](https://github.com/kubernetes-sigs/kind/releases/tag/v0.24.0)).
+E2E запускает backend client с cron labels, проверяет разрешённый доступ через nginx
+и отказ прямых соединений publisher → subscriber и subscriber → publisher.
+Поведение выбранного production CNI всё равно требует проверки в целевом окружении. Тесты не включают лицензированное ядро Bitrix:
 совместимость конкретной версии модуля pull и её поведение требуют smoke test.
 
 Ориентиры: [env-docker snapshot](https://github.com/bitrix-tools/env-docker/tree/46aff98f3e3d76a7f83fc50317dc3f6502a80865),

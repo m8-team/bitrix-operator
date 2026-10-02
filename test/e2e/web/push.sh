@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Sourced only by hack/e2e-web.sh inside its own disposable kind cluster.
-# kindnet does not enforce NetworkPolicy: this covers API resources and protocol,
-# not CNI enforcement. The Node probe runs inside publisher to reuse upstream dependencies.
+# Pinned kind includes kube-network-policies. Exercise allowed and denied traffic.
+# A disposable client has the cron identity, matching the trusted backend boundary.
 kubectl -n bitrix-web-test apply -f config/examples/push-default-deny.yaml
 push_image=quay.io/bitrix24/push:3.3-v1-alpine@sha256:7ea0b71d66ab6cc9b0b58b6ba853d4398880fdfb1aa19b434a3bf462043bfecc
 kubectl -n bitrix-web-test create secret generic bitrix-push --from-literal=key=synthetic-signing-key-0123456789abcdef0123456789abcdef
@@ -21,10 +21,20 @@ assert all(conditions[t]["status"]=="True" and conditions[t]["observedGeneration
     return 1
 }
 check_push() {
+    kubectl -n bitrix-web-test delete pod/postgresql-push-client --ignore-not-found --wait=true
+    kubectl -n bitrix-web-test get deployment/postgresql-push-publisher -o json |
+        python3 test/e2e/web/push-client.py | kubectl apply -f -
+    kubectl -n bitrix-web-test wait pod/postgresql-push-client --for=condition=Ready --timeout=90s
     # Real WebSocket/long polling and signed REST traverse the public nginx Service.
-    kubectl -n bitrix-web-test exec -i deployment/postgresql-push-publisher -c publisher -- \
+    kubectl -n bitrix-web-test exec -i pod/postgresql-push-client -c probe -- \
         node - http://postgresql-push-publisher:9010 http://postgresql-web,http://postgresql-web http://postgresql-web /bitrix/sub/ \
         < internal/runtime/testdata/check-push.cjs
+    # Neither Push role is a trusted web/cron peer. Direct cross-role TCP must fail.
+    kubectl -n bitrix-web-test exec -i deployment/postgresql-push-subscriber -c subscriber -- \
+        node - postgresql-push-publisher 9010 < test/e2e/web/denied-push.cjs
+    kubectl -n bitrix-web-test exec -i deployment/postgresql-push-publisher -c publisher -- \
+        node - postgresql-push-subscriber 8010 < test/e2e/web/denied-push.cjs
+    kubectl -n bitrix-web-test delete pod/postgresql-push-client --wait=true
     kubectl -n bitrix-web-test exec deployment/postgresql-web -c nginx -- sh -ec '
         for uri in /bitrix/pub/ /bitrix/PUB/ /server-stat/; do
             if wget -S -O /tmp/body --header="Host: portal.example.com" "http://postgresql-web$uri" 2>/tmp/headers; then exit 1; fi
@@ -71,4 +81,4 @@ kubectl -n bitrix-web-test exec deployment/postgresql-web -c php -- php -r '
     $s = require "/opt/www/bitrix/.settings.php";
     if ($s["pull"]["value"]["nginx"] !== "N") {exit(1);}
 '
-echo 'Push E2E passed: nginx WS/polling/REST, HMAC, scale, rotation and disable'
+echo 'Push E2E passed: nginx WS/polling/REST, HMAC, network isolation, scale, rotation and disable'
