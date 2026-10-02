@@ -135,7 +135,7 @@ func TestReleaseReference(t *testing.T) {
 }
 
 func TestSiteResults(t *testing.T) {
-	id := ValidationIdentity{ClusterUID: "uid", Generation: 4, Release: "sha256:" + strings.Repeat("a", 64), Attempt: "job-uid"}
+	id := ValidationIdentity{ClusterUID: "uid", Generation: 4, Release: "sha256:" + strings.Repeat("a", 64), PHP: "sha256:" + strings.Repeat("b", 64), Attempt: "job-uid"}
 	valid := SiteResult{Version: ContractVersion, Identity: id, Sites: []string{"s1"}, Reason: "Validated"}
 	encode := func(v SiteResult) []byte {
 		data, err := json.Marshal(v)
@@ -148,7 +148,7 @@ func TestSiteResults(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, change := range []func(*SiteResult){
-		func(r *SiteResult) { r.Identity.Generation++ }, func(r *SiteResult) { r.Identity.Attempt = "old" },
+		func(r *SiteResult) { r.Identity.Generation++ }, func(r *SiteResult) { r.Identity.PHP = "sha256:" + strings.Repeat("c", 64) }, func(r *SiteResult) { r.Identity.Attempt = "old" },
 		func(r *SiteResult) { r.Sites = []string{"s2"} }, func(r *SiteResult) { r.Sites = []string{"s1", "s1"} },
 		func(r *SiteResult) { r.Sites = nil }, func(r *SiteResult) { r.Reason = "password leaked" },
 	} {
