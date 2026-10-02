@@ -16,8 +16,6 @@ import (
 
 const pushPublisher = "publisher"
 const pushSubscriber = "subscriber"
-const progressDeadlineExceeded = "ProgressDeadlineExceeded"
-const bitrixClusterKind = "BitrixCluster"
 
 func pushEnabled(c *bx.BitrixCluster) bool {
 	return c.Spec.Runtime.Push != nil && c.Spec.Runtime.Push.Enabled
@@ -53,13 +51,11 @@ func (r *BitrixClusterReconciler) reconcilePush(ctx context.Context, c *bx.Bitri
 			desired = c.Spec.Runtime.Push.Publisher.Replicas
 			target = &c.Status.Runtime.PushPublisher
 		}
-		s := d.Status
-		*target = bx.WorkloadStatus{DesiredReplicas: desired, ReadyReplicas: s.ReadyReplicas, UpdatedReplicas: s.UpdatedReplicas, AvailableReplicas: s.AvailableReplicas}
-		ready = ready && s.ObservedGeneration >= d.Generation && s.Replicas == desired && s.ReadyReplicas == desired && s.UpdatedReplicas == desired && s.AvailableReplicas == desired
-		for _, cond := range s.Conditions {
-			if s.ObservedGeneration >= d.Generation && cond.Type == appsv1.DeploymentProgressing && cond.Status == corev1.ConditionFalse && cond.Reason == progressDeadlineExceeded {
-				return block(progressDeadlineExceeded, "A Push Deployment exceeded its rollout deadline")
-			}
+		rollout := observeDeployment(d, desired)
+		*target = rollout.status
+		ready = ready && rollout.ready
+		if rollout.deadlineExceeded {
+			return block(progressDeadlineExceeded, "A Push Deployment exceeded its rollout deadline")
 		}
 	}
 	if ready {
@@ -101,8 +97,7 @@ func (r *BitrixClusterReconciler) deletePushObject(ctx context.Context, c *bx.Bi
 	if err != nil {
 		return false, err
 	}
-	owner := metav1.GetControllerOf(obj)
-	if owner == nil || owner.UID != c.UID || owner.Kind != bitrixClusterKind || owner.APIVersion != bx.GroupVersion.String() {
+	if !controlledByCluster(c, obj) {
 		return true, block("ResourceCollision", "A Push resource is not controlled by this BitrixCluster")
 	}
 	if obj.GetDeletionTimestamp().IsZero() {
