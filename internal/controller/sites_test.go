@@ -64,6 +64,8 @@ var _ = Describe("Site validation", func() {
 		c := reconcileWeb(webSample())
 		markWebReady(c)
 		reconcileWeb(c)
+		Expect(c.Status.Release).NotTo(BeNil())
+		Expect(c.Status.Release.Digest).To(Equal(siteTestReleaseDigest))
 		j := validationJob(c)
 		Expect(*j.Spec.ActiveDeadlineSeconds).To(Equal(int64(120)))
 		Expect(*j.Spec.BackoffLimit).To(BeZero())
