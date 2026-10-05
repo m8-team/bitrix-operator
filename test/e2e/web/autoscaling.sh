@@ -14,7 +14,7 @@ wait_hpa_cluster() {
     kubectl -n bitrix-web-test wait bitrixcluster/cron --for=condition=Ready --timeout=240s
 }
 echo 'Checking HPA without metrics-server'
-kubectl -n bitrix-web-test patch bitrixcluster/cron --type=merge -p '{"spec":{"runtime":{"web":{"replicas":1,"autoscaling":{"enabled":true,"minReplicas":1,"maxReplicas":3,"targetCPUUtilization":50},"nginx":{"resources":{"requests":{"cpu":"100m","memory":"64Mi"}}},"php":{"resources":{"requests":{"cpu":"100m","memory":"64Mi"}}}}}}'
+kubectl -n bitrix-web-test patch bitrixcluster/cron --type=merge --patch-file=test/e2e/web/autoscaling-patch.yaml
 kubectl -n bitrix-web-test wait bitrixcluster/cron --for=jsonpath='{.status.conditions[?(@.type=="AutoscalingReady")].reason}'=MetricsPending --timeout=180s
 kubectl -n bitrix-web-test wait bitrixcluster/cron --for=condition=WebReady --timeout=240s
 # Pin release bytes. Insecure kubelet TLS is ONLY for this disposable kind fixture.
