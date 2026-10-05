@@ -14,6 +14,8 @@ cleanup() {
     result=$?
     if [ "$result" -ne 0 ]; then
         kubectl get pods,pvc,bitrixclusters -A -o wide || true
+        kubectl -n bitrix-web-test get hpa -o yaml || true
+        kubectl -n kube-system logs deployment/metrics-server --tail=50 || true
         kubectl get gateways,httproutes -A -o yaml || true
         kubectl -n envoy-gateway-system logs deployment/envoy-gateway --tail=100 || true
         kubectl -n bitrix-web-test get events --sort-by=.lastTimestamp || true
@@ -123,6 +125,7 @@ kubectl -n bitrix-web-test exec deployment/cron-web -c php -- sh -ec 'test ! -e 
 kubectl -n bitrix-web-test patch bitrixcluster/cron --type=merge -p '{"spec":{"runtime":{"cron":{"enabled":false}}}}'
 kubectl -n bitrix-web-test wait deployment/cron-cron --for=delete --timeout=120s
 kubectl -n bitrix-web-test wait bitrixcluster/cron --for=jsonpath='{.status.conditions[?(@.type=="CronReady")].reason}'=Disabled --timeout=120s
+source test/e2e/web/autoscaling.sh
 source test/e2e/web/push.sh
 source test/e2e/web/gateway.sh
 # Data survives CR deletion; a new CR with the same name cannot adopt it silently.

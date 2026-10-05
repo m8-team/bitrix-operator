@@ -156,6 +156,10 @@ func Deployment(c *bx.BitrixCluster, b *render.Bundle, revision, image string) *
 		core.Volume().WithName("nginx-tmp").WithEmptyDir(core.EmptyDirVolumeSource().WithSizeLimit(resource.MustParse("64Mi"))),
 		core.Volume().WithName("nginx-config").WithConfigMap(core.ConfigMapVolumeSource().WithName(Name(c, "nginx-"+b.Hash[:12])).WithDefaultMode(0444)))
 	replicas := max(c.Spec.Runtime.Web.Replicas, 1)
+	if AutoscalingEnabled(c) {
+		a := c.Spec.Runtime.Web.Autoscaling
+		replicas = min(max(replicas, a.MinReplicas), a.MaxReplicas)
+	}
 	strategy := apps.DeploymentStrategy().WithType(appsv1.RecreateDeploymentStrategyType)
 	for _, mode := range c.Spec.Storage.Uploads.PersistentVolumeClaim.AccessModes {
 		if mode == corev1.ReadWriteMany {

@@ -27,14 +27,17 @@ func markWebReady(c *bx.BitrixCluster) {
 	p.Status.Phase = corev1.ClaimBound
 	Expect(k8sClient.Status().Update(ctx, p)).To(Succeed())
 	d := webDeployment(c)
-	d.Status = appsv1.DeploymentStatus{ObservedGeneration: d.Generation, Replicas: 1, ReadyReplicas: 1, UpdatedReplicas: 1, AvailableReplicas: 1}
+	n := *d.Spec.Replicas
+	d.Status = appsv1.DeploymentStatus{ObservedGeneration: d.Generation, Replicas: n, ReadyReplicas: n, UpdatedReplicas: n, AvailableReplicas: n}
 	Expect(k8sClient.Status().Update(ctx, d)).To(Succeed())
 	rs := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{GenerateName: "web-rs-", Namespace: c.Namespace, OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(d, appsv1.SchemeGroupVersion.WithKind("Deployment"))}}, Spec: appsv1.ReplicaSetSpec{Selector: d.Spec.Selector, Template: d.Spec.Template}}
 	Expect(k8sClient.Create(ctx, rs)).To(Succeed())
-	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{GenerateName: "web-pod-", Namespace: c.Namespace, Labels: d.Spec.Template.Labels, Annotations: d.Spec.Template.Annotations, OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(rs, appsv1.SchemeGroupVersion.WithKind("ReplicaSet"))}}, Spec: d.Spec.Template.Spec}
-	Expect(k8sClient.Create(ctx, pod)).To(Succeed())
-	pod.Status = corev1.PodStatus{Phase: corev1.PodRunning, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}, InitContainerStatuses: []corev1.ContainerStatus{{Name: "release", ImageID: siteTestReleaseDigest, State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0}}}}, ContainerStatuses: []corev1.ContainerStatus{{Name: "php", ImageID: siteTestPHPDigest}}}
-	Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+	for range n {
+		pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{GenerateName: "web-pod-", Namespace: c.Namespace, Labels: d.Spec.Template.Labels, Annotations: d.Spec.Template.Annotations, OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(rs, appsv1.SchemeGroupVersion.WithKind("ReplicaSet"))}}, Spec: d.Spec.Template.Spec}
+		Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+		pod.Status = corev1.PodStatus{Phase: corev1.PodRunning, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}, InitContainerStatuses: []corev1.ContainerStatus{{Name: "release", ImageID: siteTestReleaseDigest, State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 0}}}}, ContainerStatuses: []corev1.ContainerStatus{{Name: "php", ImageID: siteTestPHPDigest}}}
+		Expect(k8sClient.Status().Update(ctx, pod)).To(Succeed())
+	}
 }
 func validationJob(c *bx.BitrixCluster) *batchv1.Job {
 	jobs := &batchv1.JobList{}

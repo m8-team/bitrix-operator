@@ -78,12 +78,12 @@ func (r *BitrixClusterReconciler) observedRuntimeDigests(ctx context.Context, c 
 			return "", "", err
 		}
 		parent := metav1.GetControllerOf(rs)
-		if rs.UID != owner.UID || parent == nil || parent.UID != deployment.UID || parent.Kind != "Deployment" || parent.APIVersion != appsv1.SchemeGroupVersion.String() {
+		if rs.UID != owner.UID || parent == nil || parent.UID != deployment.UID || parent.Kind != deploymentKind || parent.APIVersion != appsv1.SchemeGroupVersion.String() {
 			continue
 		}
 		observed++
 		foundRelease := releaseDigest(&p)
-		foundPHP := containerDigest(&p, "php")
+		foundPHP := containerDigest(&p, phpContainer)
 		if foundRelease == "" || foundPHP == "" {
 			return "", "", nil
 		}
@@ -93,7 +93,7 @@ func (r *BitrixClusterReconciler) observedRuntimeDigests(ctx context.Context, c 
 		release = foundRelease
 		php = foundPHP
 	}
-	if observed != c.Spec.Runtime.Web.Replicas {
+	if observed < 1 || observed != webDesiredReplicas(c, deployment) {
 		return "", "", nil
 	}
 	return release, php, nil
@@ -114,7 +114,7 @@ func readyReleasePod(p *corev1.Pod, image, phpImage string) bool {
 		}
 	}
 	for _, container := range p.Spec.Containers {
-		if container.Name == "php" && container.Image == phpImage {
+		if container.Name == phpContainer && container.Image == phpImage {
 			php = true
 		}
 	}
@@ -256,11 +256,11 @@ func (r *BitrixClusterReconciler) siteResult(ctx context.Context, c *bx.BitrixCl
 		if owner == nil || owner.UID != job.UID || owner.Kind != "Job" || owner.APIVersion != batchv1.SchemeGroupVersion.String() || p.Status.Phase != corev1.PodSucceeded || !p.DeletionTimestamp.IsZero() {
 			continue
 		}
-		if releaseDigest(&p) != identity.Release || containerDigest(&p, "php") != identity.PHP {
+		if releaseDigest(&p) != identity.Release || containerDigest(&p, phpContainer) != identity.PHP {
 			return unavailable, true, nil
 		}
 		for _, s := range p.Status.ContainerStatuses {
-			if s.Name != "php" || s.State.Terminated == nil || s.State.Terminated.ExitCode != 0 {
+			if s.Name != phpContainer || s.State.Terminated == nil || s.State.Terminated.ExitCode != 0 {
 				continue
 			}
 			parsed, err := render.ParseSiteResult([]byte(s.State.Terminated.Message), identity, requested)
@@ -277,7 +277,7 @@ func (r *BitrixClusterReconciler) siteResult(ctx context.Context, c *bx.BitrixCl
 }
 
 func summarizeReadiness(c *bx.BitrixCluster) {
-	for _, kind := range []string{"StorageReady", "WebReady", "CronReady", "PushReady", "SitesValidated", "GatewayReady"} {
+	for _, kind := range []string{"StorageReady", "WebReady", "CronReady", "PushReady", "SitesValidated", "GatewayReady", "AutoscalingReady"} {
 		status := meta.FindStatusCondition(c.Status.Conditions, kind)
 		if status == nil || status.Status != metav1.ConditionTrue || status.ObservedGeneration != c.Generation {
 			reason, message := "ComponentsPending", "Waiting for required components"

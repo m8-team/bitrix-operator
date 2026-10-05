@@ -1,0 +1,22 @@
+# Merge patch for an existing BitrixCluster with RWX uploads.
+# kubectl patch bitrixcluster example --type=merge --patch-file=config/examples/autoscaling-patch.yaml
+spec:
+  runtime:
+    web:
+      replicas: 2
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 6
+        targetCPUUtilization: 70
+        # targetMemoryUtilization: 80
+      nginx:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+      php:
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi

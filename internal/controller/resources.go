@@ -62,6 +62,12 @@ func (r *BitrixClusterReconciler) apply(ctx context.Context, c *bx.BitrixCluster
 	if !existing.GetDeletionTimestamp().IsZero() {
 		return block("ResourceDeleting", "An application resource is being deleted")
 	}
+	if workload.AutoscalingEnabled(c) && desired.GetKind() == deploymentKind && desired.GetName() == workload.Name(c, "web") {
+		if err = r.handoffReplicas(ctx, existing); err != nil {
+			return err
+		}
+		unstructured.RemoveNestedField(desired.Object, "spec", "replicas")
+	}
 	// Create uses an Update managed-fields entry. ForceOwnership alone does not
 	// remove its shared ownership of unchanged fields, so later omissions could
 	// leave stale limits, pull secrets or volume settings behind. Migrate only
