@@ -34,6 +34,7 @@ kubectl -n bitrix-web-test exec "$load_pod" -c php -- php -r '$end=microtime(tru
 load_pid=$!
 kubectl -n bitrix-web-test wait deployment/cron-web --for=jsonpath='{.spec.replicas}'=3 --timeout=180s
 kubectl -n bitrix-web-test rollout status deployment/cron-web --timeout=180s
+kubectl -n bitrix-web-test wait bitrixcluster/cron --for=jsonpath='{.status.runtime.web.desiredReplicas}'=3 --timeout=120s
 wait_hpa_cluster
 test "$(kubectl -n bitrix-web-test get bitrixcluster/cron -o jsonpath='{.status.runtime.web.desiredReplicas}')" = 3
 kubectl -n bitrix-operator-system rollout restart deployment/bitrix-operator-controller-manager
