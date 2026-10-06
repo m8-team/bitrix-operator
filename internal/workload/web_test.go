@@ -46,6 +46,7 @@ func TestPodIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	pod := d.Spec.Template.Spec
+	assertWebLifecycle(t, c, b, pod)
 	if *pod.AutomountServiceAccountToken || *pod.SecurityContext.FSGroup != 979 || pod.SecurityContext.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault {
 		t.Fatal("Pod isolation regressed")
 	}
@@ -93,5 +94,23 @@ func TestNamesAreDNSLabelsAndCollisionResistant(t *testing.T) {
 			t.Fatal("distinct names collide")
 		}
 		names[name] = true
+	}
+}
+
+func assertWebLifecycle(t *testing.T, c *bx.BitrixCluster, b *render.Bundle, pod corev1.PodSpec) {
+	t.Helper()
+	if *pod.TerminationGracePeriodSeconds != 360 || len(pod.TopologySpreadConstraints) != 1 ||
+		pod.TopologySpreadConstraints[0].WhenUnsatisfiable != corev1.ScheduleAnyway ||
+		pod.TopologySpreadConstraints[0].LabelSelector.MatchLabels[OwnerUID] != string(c.UID) {
+		t.Fatal("web shutdown budget or cluster-scoped spreading missing")
+	}
+	for _, container := range pod.Containers {
+		if container.Lifecycle == nil || container.Lifecycle.PreStop == nil || container.Lifecycle.PreStop.Exec == nil {
+			t.Fatalf("missing graceful shutdown hook: %s", container.Name)
+		}
+	}
+	cronPod := Cron(c, b, "revision", "release").Spec.Template.Spec
+	if *cronPod.TerminationGracePeriodSeconds != 30 || cronPod.Containers[0].Lifecycle != nil || len(cronPod.TopologySpreadConstraints) != 0 {
+		t.Fatal("web termination policy leaked into cron")
 	}
 }

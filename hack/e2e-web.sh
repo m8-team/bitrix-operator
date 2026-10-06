@@ -10,6 +10,10 @@ if kind get clusters 2>/dev/null | grep -qx "$cluster"; then
 fi
 export KUBECONFIG
 KUBECONFIG=$(mktemp)
+web_tmp=$(mktemp -d)
+mkdir "$web_tmp/uploads"
+chmod 0777 "$web_tmp/uploads"
+sed "s|HOST_UPLOADS|$web_tmp/uploads|g" test/e2e/web/kind.yaml > "$web_tmp/kind.yaml"
 cleanup() {
     result=$?
     if [ "$result" -ne 0 ]; then
@@ -33,11 +37,15 @@ cleanup() {
     fi
     kind delete cluster --name "$cluster"
     rm -f "$KUBECONFIG"
+    # Containers may have written UID 979 files into this test-owned directory.
+    sudo rm -rf -- "$web_tmp"
     exit "$result"
 }
 trap cleanup EXIT
 kind create cluster --name "$cluster" --kubeconfig "$KUBECONFIG" \
+    --config "$web_tmp/kind.yaml" \
     --image kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5 --wait 120s
+kubectl taint node "$cluster-control-plane" node-role.kubernetes.io/control-plane:NoSchedule-
 # All images are test artifacts, loaded locally without a registry push.
 docker build -t bitrix-operator:e2e .
 docker build -f test/fixtures/runtime/Dockerfile -t bitrix-runtime-fixture:e2e .
@@ -98,7 +106,7 @@ kubectl -n bitrix-web-test get pods -o json | python3 -c \
 kubectl -n bitrix-dependencies-test scale deployment/dependencies --replicas=1
 kubectl -n bitrix-dependencies-test rollout status deployment/dependencies --timeout=240s
 kubectl -n bitrix-web-test wait bitrixcluster/mysql --for=condition=WebReady --timeout=180s
-# Cron fixture uses a static, single-node RWX test PV; this does NOT certify a distributed CSI backend.
+# Cron fixture shares a test-owned host directory across both nodes; this is not a CSI certification.
 docker exec "$cluster-control-plane" mkdir -p /var/local/bitrix-cron-uploads
 docker exec "$cluster-control-plane" chown 979:979 /var/local/bitrix-cron-uploads
 kubectl apply -f test/e2e/web/cron-storage.yaml
@@ -126,6 +134,7 @@ kubectl -n bitrix-web-test patch bitrixcluster/cron --type=merge -p '{"spec":{"r
 kubectl -n bitrix-web-test wait deployment/cron-cron --for=delete --timeout=120s
 kubectl -n bitrix-web-test wait bitrixcluster/cron --for=jsonpath='{.status.conditions[?(@.type=="CronReady")].reason}'=Disabled --timeout=120s
 source test/e2e/web/autoscaling.sh
+source test/e2e/web/disruption.sh
 source test/e2e/web/push.sh
 source test/e2e/web/gateway.sh
 # Data survives CR deletion; a new CR with the same name cannot adopt it silently.

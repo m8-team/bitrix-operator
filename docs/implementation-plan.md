@@ -3,7 +3,8 @@
 Дата проверки источников: 2026-09-30. Статус: итерация 3 — web workloads и storage реализованы;
 см. docs/web-workloads.md. Итерация 4 реализует cron и agents; см. docs/cron-agents.md.
 Итерация 5 реализует Push & Pull; см. docs/push-pull.md.
-Итерация 6: Sites, Gateway API и TLS реализована; итерация 7.1 добавляет autoscaling web; эксплуатационные задачи продолжаются в 7.2.
+Итерация 6: Sites, Gateway API и TLS реализована; итерация 7.1 добавляет autoscaling web;
+7.2 — PDB, topology и graceful drain; эксплуатационные задачи продолжаются в 7.3.
 Репозиторий: https://github.com/m8-team/bitrix-operator
 Go module: github.com/m8-team/bitrix-operator
 
@@ -398,8 +399,9 @@ cross-namespace кейс; certificate rotation; отсутствие Gateway CRD
 - [x] HPA enabled → disabled: удаление HPA перед восстановлением spec.web.replicas.
 - [x] Статусы и site validation учитывают фактический масштаб Deployment.
 - [x] Envtest и kind CPU autoscaling сценарий; [контракт](autoscaling.md).
-- [ ] 7.2: остальные задачи эксплуатации ниже.
-- PDB/topology, readiness, drain, конфликты SSA и RBAC.
+- [x] 7.2: web PDB, topology по узлам, readiness при drain, согласованный graceful nginx/PHP stop.
+- [x] PDB ownership/SSA/RBAC, двухузловой kind drain и сохранность uploads; [контракт](disruptions.md).
+- [ ] 7.3: остальные задачи эксплуатации ниже.
 - Prometheus metrics, dashboard/alerts примеры, Events без секретов.
 - Security review, NetworkPolicy overlays, recovery runbooks.
 

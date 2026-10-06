@@ -86,6 +86,6 @@ resource requests, RWX/RWOP и проверка сайтов при масшта
 Kind E2E: metrics-server **v0.9.0** (asset закреплён SHA-256), отсутствие metrics,
 CPU-нагрузка в synthetic PHP fixture, реальный scale-out, restart manager, уменьшение
 maxReplicas и отключение HPA с восстановлением фиксированного масштаба.
-Тест использует одноузловой RWX hostPath и не подтверждает работу распределённого CSI.
+Тест использует общий host-каталог двух kind nodes и не подтверждает работу распределённого CSI.
 `--kubelet-insecure-tls` применяется только к metrics-server внутри disposable kind;
 для production настройте проверяемые сертификаты kubelet.

@@ -1,5 +1,7 @@
 #!/bin/sh
 set -eu
+# emptyDir survives a container restart; readiness must not retain an old drain.
+rm -f /tmp/draining
 resolver=$(awk '$1 == "nameserver" {print $2; exit}' /etc/resolv.conf)
 case "$resolver" in ''|*[!0-9a-fA-F.:]*) echo 'Invalid DNS resolver' >&2; exit 1;; esac
 case "$resolver" in *:*) resolver="[$resolver]";; esac

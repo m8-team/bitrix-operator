@@ -44,6 +44,7 @@ type BitrixClusterReconciler struct {
 }
 
 // +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;patch;delete
+// +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways;gatewayclasses;referencegrants,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
@@ -218,6 +219,9 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.
 		}
 	}
 	if err = r.apply(ctx, c, workload.Service(c)); err != nil {
+		return err
+	}
+	if err = r.apply(ctx, c, workload.DisruptionBudget(c)); err != nil {
 		return err
 	}
 	if err = r.apply(ctx, c, workload.Deployment(c, b, revision, image)); err != nil {

@@ -15,6 +15,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -123,6 +124,7 @@ func (r *BitrixClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	r.GatewayAPIAvailable = available
 	b := ctrl.NewControllerManagedBy(mgr).For(&bx.BitrixCluster{}).
+		Owns(&policyv1.PodDisruptionBudget{}).
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).Owns(&batchv1.Job{}).Owns(deploymentObject()).Owns(&corev1.Service{}).Owns(&corev1.ConfigMap{}).Owns(&networkingv1.NetworkPolicy{}).
 		WatchesMetadata(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.dependencyRequests(secretIndex, true))).
 		Watches(&storagev1.StorageClass{}, handler.EnqueueRequestsFromMapFunc(r.dependencyRequests(storageClassIndex, false))).
