@@ -1,0 +1,14 @@
+# HOST_UPLOADS is replaced with a new test-owned temporary directory.
+# Both nodes mount the same host directory. This tests cross-node lifecycle,
+# not production CSI behavior, distributed locking or failure recovery.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: HOST_UPLOADS
+        containerPath: /var/local/bitrix-cron-uploads
+  - role: worker
+    extraMounts:
+      - hostPath: HOST_UPLOADS
+        containerPath: /var/local/bitrix-cron-uploads

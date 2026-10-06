@@ -2,7 +2,7 @@
 
 Kubernetes operator для коробочного портала и сайтов Bitrix.
 
-**Итерация 7.1: Web autoscaling.** Оператор создаёт nginx/PHP Deployment,
+**Итерация 7.2: Web PDB, topology и graceful drain.** Оператор создаёт nginx/PHP Deployment,
 HTTP Service, retained uploads PVC и versioned конфиги из родных файловых шаблонов.
 Поддержаны внешние MySQL/PostgreSQL и Redis, Secret rotation и статусы rollout.
 [Запуск и ограничения](docs/web-workloads.md). `WebReady` отражает работу web;
@@ -87,7 +87,9 @@ Push publisher/subscriber, nginx WebSocket/long polling, signed REST и рота
 [подключение и ограничения публикации](docs/gateway-tls.md).
 Добавлен HPA v2 с передачей владения replicas и проверкой requests/RWX;
 [настройка и ограничения autoscaling](docs/autoscaling.md).
-PDB, дальнейшее эксплуатационное усиление и публикация operator image — следующие этапы.
+Добавлены web PDB, предпочтительное размещение по узлам и согласованное завершение nginx/PHP;
+[обслуживание узлов и ограничения](docs/disruptions.md).
+Наблюдаемость, дальнейшее эксплуатационное усиление и публикация operator image — следующие этапы.
 См. также [web workloads](docs/web-workloads.md).
 
 Лицензия: [Apache-2.0](LICENSE).

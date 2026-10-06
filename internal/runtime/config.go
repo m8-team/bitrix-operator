@@ -44,8 +44,10 @@ func renderConfigs(data configData) (map[string]string, map[string]string, error
 	}{
 		{"nginx/nginx.conf.tmpl", "nginx.conf", nginx},
 		{"nginx/start.sh", "start.sh", nginx},
+		{"nginx/stop.sh", "stop.sh", nginx},
 		{"nginx/resolver.conf", "resolver.conf", nginx},
 		{"php/php-fpm.conf", "php-fpm.conf", php},
+		{"php/stop-web.sh", "stop-web.sh", php},
 		{"php/php.ini.tmpl", "php.ini", php},
 		{"bitrix/init-release.sh", "init-release.sh", php},
 		{"bitrix/fpm-live.php", "fpm-live.php", php},

@@ -1,5 +1,5 @@
 # Sourced by the isolated kind test after the cron workload has been disabled.
-# Reuse its single-node RWX fixture; this does not certify distributed storage.
+# Reuse its shared host-directory RWX fixture; this does not certify distributed storage.
 (
 set -Eeuo pipefail
 tmp_hpa=$(mktemp -d)

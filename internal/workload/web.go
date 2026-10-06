@@ -143,6 +143,14 @@ func phpPod(c *bx.BitrixCluster, b *render.Bundle, image string) *core.PodSpecAp
 func Deployment(c *bx.BitrixCluster, b *render.Bundle, revision, image string) *apps.DeploymentApplyConfiguration {
 	pod := phpPod(c, b, image)
 	php := pod.Containers[0]
+	// Keep FPM alive until nginx has finished serving accepted requests. The
+	// read-only mount exposes nginx's master pidfile, removed after worker exit.
+	php.WithVolumeMounts(mount("nginx-tmp", "/run/nginx-state", true)).
+		WithLifecycle(core.Lifecycle().WithPreStop(core.LifecycleHandler().WithExec(
+			core.ExecAction().WithCommand("/bin/sh", render.ConfigRoot+"/stop-web.sh"))))
+	pod.WithTerminationGracePeriodSeconds(360).WithTopologySpreadConstraints(
+		core.TopologySpreadConstraint().WithMaxSkew(1).WithTopologyKey("kubernetes.io/hostname").
+			WithWhenUnsatisfiable(corev1.ScheduleAnyway).WithLabelSelector(meta.LabelSelector().WithMatchLabels(labels(c))))
 	pod.Containers = nil
 	nginx := core.Container().WithName("nginx").WithImage(c.Spec.Runtime.Web.Nginx.Image).WithImagePullPolicy(corev1.PullIfNotPresent).
 		WithCommand("/bin/sh", "/run/nginx/start.sh").WithSecurityContext(security()).
@@ -151,6 +159,8 @@ func Deployment(c *bx.BitrixCluster, b *render.Bundle, revision, image string) *
 			mount("nginx-config", "/run/nginx", true), mount("nginx-tmp", "/tmp", false)).
 		WithStartupProbe(httpProbe("/live").WithFailureThreshold(30)).WithLivenessProbe(httpProbe("/live")).WithReadinessProbe(httpProbe("/ready"))
 	nginx.WithVolumeMounts(mount("temporary", render.Root+"/bitrix/html_pages", true).WithSubPath("html_pages"))
+	nginx.WithLifecycle(core.Lifecycle().WithPreStop(core.LifecycleHandler().WithExec(
+		core.ExecAction().WithCommand("/bin/sh", "/run/nginx/stop.sh"))))
 	pod.WithContainers(nginx, &php)
 	pod.WithVolumes(
 		core.Volume().WithName("nginx-tmp").WithEmptyDir(core.EmptyDirVolumeSource().WithSizeLimit(resource.MustParse("64Mi"))),

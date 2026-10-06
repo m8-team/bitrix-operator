@@ -7,6 +7,7 @@
 |---|---|---|
 | `nginx/nginx.conf.tmpl` | nginx HTTP/FastCGI, hosts, защита uploads | `text/template` |
 | `nginx/start.sh`, `nginx/resolver.conf` | проверка Pod DNS и подстановка runtime DNS tokens | побайтное копирование, startup substitution |
+| `nginx/stop.sh`, `php/stop-web.sh` | согласованный graceful web shutdown через preStop | побайтное копирование |
 | `push/publisher.json`, `push/subscriber.json` | native Push role configs | побайтное копирование, JSON serialization внутри Pod |
 | `push/configure.cjs`, `push/start.sh`, `push/health.cjs` | Secret files, startup и probes | побайтное копирование |
 | `push/pull.php` | PHP pull settings | побайтное копирование |

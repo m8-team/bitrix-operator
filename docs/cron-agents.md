@@ -80,6 +80,6 @@ Secret. Native container tests проверяют интервал, конкур
 ошибку worker, отключение, graceful stop и restart на закреплённом PHP image. Отдельный `docker stop`
 проверяет image stop signal с wrapper в PID 1 и завершением активного агента.
 Kind E2E проверяет mounts, FPM agent mode, выполнение, отключение агента и удаление
-workload. Его статический RWX volume работает на одном узле: это не тест NFS/CSI
+workload. Его статический RWX volume использует общий host-каталог двух kind nodes: это не тест NFS/CSI
 при сетевом разделении. Fixture содержит синтетические CAgent/COption, а не
 лицензионное ядро Bitrix; production release требует отдельной проверки ядра и модулей.

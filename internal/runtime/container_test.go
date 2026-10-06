@@ -78,6 +78,7 @@ func testPHPContainer(t *testing.T, mode string) {
 	args := append(containerArgs(), "-v", config+":"+ConfigRoot+":ro", "-v", secrets+":"+SecretRoot+":ro",
 		"--entrypoint=sh", "bitrix-runtime-fixture", "-ec", `
 for file in /run/bitrix-config/*.php /opt/www/bitrix/.*.php; do php -l "$file"; done
+sh -n /run/bitrix-config/stop-web.sh
 php-fpm -c /run/bitrix-config/php.ini -y /run/bitrix-config/php-fpm.conf -t
 php -c /run/bitrix-config/php.ini /run/bitrix-config/check.php
 `)
@@ -129,6 +130,12 @@ func testNginxContainer(t *testing.T) {
 	args = append(containerArgs(), "-v", dir+":/run/nginx:ro", "-v", root+":"+Root+":ro", "--entrypoint=sh", nginxImage, "-ec", `
 nginx -c /run/nginx/nginx.conf
 trap 'nginx -c /run/nginx/nginx.conf -s quit' EXIT
+sh -n /run/nginx/start.sh /run/nginx/stop.sh
+touch /tmp/draining
+if wget -S -O /tmp/body http://127.0.0.1:8081/ready 2>/tmp/headers; then exit 1; fi
+grep -q '503 Service Temporarily Unavailable' /tmp/headers
+test "$(wget -qO- http://127.0.0.1:8081/live)" = ok
+rm /tmp/draining
 wget -q -O /tmp/body --header='Host: portal.example.com' http://127.0.0.1:8080/index.html
 grep -q 'public fixture' /tmp/body
 for uri in /.env /source.PHP /source.php.jpg /bitrix/license_key.php /bitrix/.settings.php /upload/evil.php /upload/evil.PHP /upload/evil.phtml /bitrix/pub/ /bitrix/PUB/ /server-stat/; do

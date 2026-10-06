@@ -1,4 +1,5 @@
 worker_processes auto;
+worker_shutdown_timeout 300s;
 pid /tmp/nginx.pid;
 error_log /dev/stderr warn;
 events { worker_connections 1024; }
@@ -28,6 +29,7 @@ http {
   access_log off;
   location = /live { return 200 'ok'; }
   location = /ready {
+   if (-f /tmp/draining) { return 503; }
    include /etc/nginx/fastcgi_params;
    fastcgi_param SCRIPT_FILENAME /run/bitrix-config/ready.php;
    fastcgi_pass 127.0.0.1:9000;
