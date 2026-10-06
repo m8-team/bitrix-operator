@@ -9,6 +9,8 @@ import (
 
 const (
 	bitrixClusterKind        = "BitrixCluster"
+	deploymentKind           = "Deployment"
+	phpContainer             = "php"
 	progressDeadlineExceeded = "ProgressDeadlineExceeded"
 )
 

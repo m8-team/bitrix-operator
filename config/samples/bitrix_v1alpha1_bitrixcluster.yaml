@@ -1,5 +1,5 @@
 # Replace release image, external endpoints and StorageClass; create referenced Secrets first.
-# WebReady reports web health; Ready stays False until kernel site validation is implemented.
+# WebReady reports web health; Ready also requires site validation and enabled dependencies.
 apiVersion: bitrix.m8.team/v1alpha1
 kind: BitrixCluster
 metadata:

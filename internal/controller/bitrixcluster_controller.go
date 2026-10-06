@@ -43,6 +43,7 @@ type BitrixClusterReconciler struct {
 	GatewayAPIAvailable bool
 }
 
+// +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways;gatewayclasses;referencegrants,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch
@@ -88,6 +89,10 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	if c.Spec.Runtime.Cron.Enabled {
 		c.Status.Runtime.Cron.DesiredReplicas = 1
 		condition(c, "CronReady", metav1.ConditionFalse, "RolloutPending", "Waiting for the desired cron rollout")
+	}
+	condition(c, "AutoscalingReady", metav1.ConditionTrue, "Disabled", "Web autoscaling is disabled")
+	if workload.AutoscalingEnabled(c) {
+		condition(c, "AutoscalingReady", metav1.ConditionFalse, "AutoscalingPending", "Waiting for the HPA")
 	}
 	initializePushStatus(c)
 	condition(c, "GatewayReady", metav1.ConditionTrue, "Disabled", "Gateway publication is disabled")
@@ -152,12 +157,12 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 func validateWorkload(c *bx.BitrixCluster) error {
 	s := c.Spec
-	if s.Runtime.Web.Autoscaling != nil && s.Runtime.Web.Autoscaling.Enabled {
-		return block("UnsupportedFeatures", "Autoscaling is not implemented yet")
+	if err := validateAutoscaling(c); err != nil {
+		return err
 	}
 
 	modes := s.Storage.Uploads.PersistentVolumeClaim.AccessModes
-	multiPod := s.Runtime.Web.Replicas > 1 || s.Runtime.Cron.Enabled
+	multiPod := s.Runtime.Web.Replicas > 1 || s.Runtime.Cron.Enabled || (workload.AutoscalingEnabled(c) && s.Runtime.Web.Autoscaling.MaxReplicas > 1)
 	if slices.Contains(modes, corev1.ReadOnlyMany) {
 		return block("InvalidStorageMode", "Uploads storage must be writable")
 	}
@@ -227,10 +232,13 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.
 	if err = r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "web")}, deployment); err != nil {
 		return err
 	}
-	desired := c.Spec.Runtime.Web.Replicas
+	if err = r.reconcileHPA(ctx, c); err != nil {
+		return err
+	}
+	desired := webDesiredReplicas(c, deployment)
 	rollout := observeDeployment(deployment, desired)
 	c.Status.Runtime.Web = rollout.status
-	if rollout.ready && pvc.Status.Phase == corev1.ClaimBound {
+	if desired > 0 && rollout.ready && pvc.Status.Phase == corev1.ClaimBound {
 		condition(c, "WebReady", metav1.ConditionTrue, "RolloutComplete", "The desired web replicas are ready and uploads storage is bound")
 		c.Status.Release = &bx.ReleaseStatus{Repository: c.Spec.Release.Image.Repository, Tag: c.Spec.Release.Image.Tag, Digest: c.Spec.Release.Image.Digest}
 	}
@@ -241,6 +249,11 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.
 }
 
 func (r *BitrixClusterReconciler) deleteDisabledRuntime(ctx context.Context, c *bx.BitrixCluster) error {
+	if !workload.AutoscalingEnabled(c) {
+		if err := r.deleteHPA(ctx, c); err != nil {
+			return err
+		}
+	}
 	if !c.Spec.Runtime.Cron.Enabled {
 		if err := r.deleteCron(ctx, c); err != nil {
 			return err

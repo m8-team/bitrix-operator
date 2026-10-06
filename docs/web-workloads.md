@@ -97,7 +97,7 @@ Workflow `Web workloads` проверяет MySQL, PostgreSQL, Redis, HTTP, пр
 их создаёт только тест. Проверка реального лицензированного Bitrix требует отдельного
 предоставленного release image и не подменяется fixture.
 
-HPA пока возвращает `UnsupportedFeatures`, если включён в CR. Cron/agents, Push и
-[Gateway/TLS](gateway-tls.md) реализованы в последующих итерациях. Автоустановка Bitrix, DB migration, backup, NetworkPolicy, TLS к внешним
+[HPA](autoscaling.md), Cron/agents, Push и [Gateway/TLS](gateway-tls.md)
+реализованы в последующих итерациях. Автоустановка Bitrix, DB migration, backup, NetworkPolicy, TLS к внешним
 DB/Redis и production smoke не входят в эту итерацию. Проверено на Linux amd64;
 arm64 и конкретные CSI drivers требуют собственных прогонов.
