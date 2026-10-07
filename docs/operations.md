@@ -77,5 +77,6 @@ Secrets/ключи. Оператор не выполняет backup/restore, DB 
 до переключения трафика. Ротация crypto key не является универсальным исправлением:
 она может сделать ранее зашифрованные данные недоступными.
 
-Security review, NetworkPolicy overlays и recovery для конкретного CSI/DB остаются
-итерацией 7.4.
+Security review и opt-in NetworkPolicy profiles описаны в [security.md](security.md).
+Проверка реального CNI enforcement и recovery для конкретного CSI/DB остаются
+итерациями 7.4.2 и 7.4.3.
