@@ -1,8 +1,11 @@
 # Backup и восстановление
 
 Итерация **7.4.3a**: runbook и воспроизводимый logical restore drill для MySQL,
-PostgreSQL и uploads. CI-сценарий добавлен; подтверждением служит успешный job
-`Recovery drill` на конкретном commit. Production CSI, целевые RPO/RTO и проверка
+PostgreSQL и uploads. [Recovery drill успешно завершён](https://github.com/m8-team/bitrix-operator/actions/runs/37654127499)
+на commit `e894fa74b11c0e0be670e581344fe1a656241a7c` (2026-10-07).
+Обе БД и uploads восстановлены за 49,163 секунды; возраст consistency point —
+0,868 секунды, по одному намеренно невосстановленному marker на engine.
+Все остальные CI workflows этого commit также прошли. Production CSI, целевые RPO/RTO и проверка
 лицензированного Bitrix остаются отдельным gate **7.4.3b**.
 
 Оператор управляет workloads и сохраняет uploads PVC при удалении CR. Он не делает

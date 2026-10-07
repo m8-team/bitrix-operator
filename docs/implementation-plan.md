@@ -412,7 +412,8 @@ cross-namespace кейс; certificate rotation; отсутствие Gateway CRD
 - [ ] 7.4.3: Recovery runbooks и restore drill для выбранных CSI/DB, RPO/RTO.
   - [x] 7.4.3a: [Runbook и CI drill](recovery.md) для logical MySQL/PostgreSQL backup,
     uploads, новых CR/PVC и сохранения Secret; целостность копии и измерение времени.
-    Успех E2E подтверждается отдельным workflow на конкретном commit.
+    [E2E прошёл](https://github.com/m8-team/bitrix-operator/actions/runs/37654127499):
+    восстановление обеих БД/uploads за 49,163 секунды на маленьком fixture.
   - [ ] 7.4.3b: Выбрать production CSI/DB backup backend и цели RPO/RTO; проверить
     off-cluster recovery, реальные объёмы, ключи, licensed Bitrix smoke и cutover.
 
@@ -421,6 +422,13 @@ rotation Secrets, restart operator, rollout errors, node drain и сохранн
 Ready=true только для наблюдаемой текущей generation и обязательных компонентов.
 
 ### 8. Packaging и первый release
+
+- [x] 8.1: Helm scaffold через Kubebuilder, chart с отдельным CRD lifecycle,
+  установочный YAML без изменения исходных manifests, проверки render/RBAC и
+  отдельный install/upgrade/rollback/uninstall/reinstall E2E; [инструкция](installation.md).
+  Успех нового E2E подтверждается workflow на конкретном commit.
+- [ ] 8.2: Release image/artifacts, multi-arch, SBOM, signing/provenance и vulnerability scan.
+- [ ] 8.3: Расширенные examples, dependency maintenance, upgrade matrix и licensed Bitrix smoke.
 
 - Kustomize install, Helm chart, examples: минимальный HTTP, HTTPS portal, multi-site,
   PostgreSQL, HPA, Push и private images.

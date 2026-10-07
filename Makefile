@@ -153,9 +153,7 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
-	mkdir -p dist
-	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
-	"$(KUSTOMIZE)" build config/default > dist/install.yaml
+	IMG="$(IMG)" KUSTOMIZE="$(KUSTOMIZE)" bash hack/build-installer.sh
 
 ##@ Deployment
 
@@ -268,3 +266,51 @@ verify-generated: manifests generate kustomize ## Fail if generated files differ
 	"$(KUSTOMIZE)" build config/crd >/dev/null
 	"$(KUSTOMIZE)" build config/default >/dev/null
 	"$(KUSTOMIZE)" build config/samples >/dev/null
+
+##@ Helm Deployment
+
+## Helm binary to use for deploying the chart
+HELM ?= $(LOCALBIN)/helm
+## Namespace to deploy the Helm release
+HELM_NAMESPACE ?= bitrix-operator-system
+## Name of the Helm release
+HELM_RELEASE ?= bitrix-operator
+## Path to the Helm chart directory
+HELM_CHART_DIR ?= dist/chart
+## Additional arguments to pass to helm commands
+HELM_EXTRA_ARGS ?=
+
+.PHONY: install-helm
+install-helm: ## Install the pinned Helm CLI with checksum verification.
+	bash hack/install-helm.sh
+
+.PHONY: helm-deploy
+helm-deploy: ## Deploy manager to the selected cluster; IMG accepts tag or digest references.
+	$(HELM) upgrade --install $(HELM_RELEASE) $(HELM_CHART_DIR) \
+		--namespace $(HELM_NAMESPACE) --create-namespace \
+		--set-string manager.image.reference="$(IMG)" --wait --timeout 5m $(HELM_EXTRA_ARGS)
+
+.PHONY: sync-chart
+sync-chart: manifests generate ## Copy authoritative CRD/RBAC into the chart.
+	bash hack/sync-chart.sh
+
+.PHONY: test-chart
+test-chart: sync-chart ## Lint, render and test the chart using the pinned local Helm CLI.
+	bin/helm lint --strict dist/chart --kube-version 1.37.0 --set-string manager.image.reference=controller:test
+	BITRIX_CHART_TESTS=1 go test ./internal/packaging -count=1
+
+.PHONY: helm-uninstall
+helm-uninstall: ## Uninstall the Helm release from the K8s cluster.
+	$(HELM) uninstall $(HELM_RELEASE) --namespace $(HELM_NAMESPACE)
+
+.PHONY: helm-status
+helm-status: ## Show Helm release status.
+	$(HELM) status $(HELM_RELEASE) --namespace $(HELM_NAMESPACE)
+
+.PHONY: helm-history
+helm-history: ## Show Helm release history.
+	$(HELM) history $(HELM_RELEASE) --namespace $(HELM_NAMESPACE)
+
+.PHONY: helm-rollback
+helm-rollback: ## Rollback to previous Helm release.
+	$(HELM) rollback $(HELM_RELEASE) --namespace $(HELM_NAMESPACE)
