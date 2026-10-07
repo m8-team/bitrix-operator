@@ -1,0 +1,42 @@
+# Synthetic listener/client. fixture.py only assigns identities and node placement.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: probe
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      test.bitrix.m8.team/fixture: probe
+  template:
+    metadata:
+      labels:
+        test.bitrix.m8.team/fixture: probe
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 1
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: probe
+          image: bitrix-network-fixture:e2e
+          imagePullPolicy: Never
+          args: [serve]
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 2
+          resources:
+            requests: {cpu: 5m, memory: 8Mi}
+            limits: {cpu: 100m, memory: 32Mi}

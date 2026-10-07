@@ -114,9 +114,10 @@ generated Pods, init containers и чувствительные manager RBAC per
 Существующий kind E2E запускает runtime Pods с PSA restricted, но не доказывает
 enforcement новых policies. Проверки API/CRD и native templates сохраняются.
 
-Следующий gate **7.4.2**: отдельный кластер с enforcing CNI; реальные Service flows
+Gate **7.4.2** реализован в [отдельном Cilium E2E](network-policy-tests.md): реальные Service flows
 Gateway → web, DB, Redis, DNS TCP/UDP и Push; отрицательные пробы с неверными
 namespace/labels/UID; повтор после rollout и пересоздания Pod на другом узле.
+Подтверждение зависит от успешного результата workflow на конкретном commit.
 Проверять новые соединения после convergence: старые соединения и задержки применения
 зависят от CNI. Ready само по себе не доказывает сетевую изоляцию.
 
