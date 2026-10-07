@@ -1,0 +1,72 @@
+rule_files: [rules.yaml]
+evaluation_interval: 1m
+tests:
+  - name: sustained unready and stale generation
+    interval: 1m
+    input_series:
+      - series: 'bitrix_cluster_condition{cluster_namespace="tenant",cluster="portal",condition="Ready",status="True",instance="a"}'
+        values: '1x4 0x25'
+      - series: 'bitrix_cluster_condition{cluster_namespace="tenant",cluster="portal",condition="Ready",status="True",instance="b"}'
+        values: '1x4 0x25'
+      - series: 'bitrix_cluster_generation{cluster_namespace="tenant",cluster="portal"}'
+        values: '2x30'
+      - series: 'bitrix_cluster_observed_generation{cluster_namespace="tenant",cluster="portal"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: BitrixClusterNotReady
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: BitrixClusterNotReady
+        exp_alerts:
+          - exp_labels: {cluster_namespace: tenant, cluster: portal, severity: warning}
+            exp_annotations:
+              summary: BitrixCluster has not been ready for 10 minutes
+              runbook_url: https://github.com/m8-team/bitrix-operator/blob/main/docs/operations.md#cluster-not-ready
+      - eval_time: 15m
+        alertname: BitrixClusterReconcileStalled
+        exp_alerts:
+          - exp_labels: {cluster_namespace: tenant, cluster: portal, severity: warning}
+            exp_annotations:
+              summary: BitrixCluster generation has not been observed for 15 minutes
+              runbook_url: https://github.com/m8-team/bitrix-operator/blob/main/docs/operations.md#reconcile-stalled
+  - name: recovery and deleted CR do not page
+    interval: 1m
+    input_series:
+      - series: 'bitrix_cluster_condition{cluster_namespace="tenant",cluster="recovered",condition="Ready",status="True"}'
+        values: '0x4 1x25'
+      - series: 'bitrix_cluster_condition{cluster_namespace="tenant",cluster="deleted",condition="Ready",status="True"}'
+        values: '0x4 stale'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: BitrixClusterNotReady
+        exp_alerts: []
+  - name: collector errors are visible independently of CR samples
+    interval: 1m
+    input_series:
+      - series: 'bitrix_operator_collection_success{job="operator",instance="a"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: BitrixOperatorCollectionFailed
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: BitrixOperatorCollectionFailed
+        exp_alerts:
+          - exp_labels: {job: operator, instance: a, severity: warning}
+            exp_annotations:
+              summary: Bitrix operator cannot read its cluster cache
+              runbook_url: https://github.com/m8-team/bitrix-operator/blob/main/docs/operations.md#metrics-unavailable
+  - name: sustained reconcile errors
+    interval: 1m
+    input_series:
+      - series: 'controller_runtime_reconcile_errors_total{controller="bitrixcluster",instance="a"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: BitrixOperatorReconcileErrors
+        exp_alerts:
+          - exp_labels: {controller: bitrixcluster, instance: a, severity: warning}
+            exp_annotations:
+              summary: Bitrix operator reconciliation errors persist
+              runbook_url: https://github.com/m8-team/bitrix-operator/blob/main/docs/operations.md#reconcile-stalled

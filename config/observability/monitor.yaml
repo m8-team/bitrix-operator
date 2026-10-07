@@ -1,0 +1,27 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: bitrix-operator
+  namespace: bitrix-operator-system
+  labels:
+    app.kubernetes.io/name: bitrix-operator
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      app.kubernetes.io/name: bitrix-operator
+  endpoints:
+    - port: https
+      path: /metrics
+      scheme: https
+      interval: 30s
+      scrapeTimeout: 10s
+      # The Prometheus Pod's projected, automatically rotated ServiceAccount token.
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        serverName: bitrix-operator-controller-manager-metrics-service.bitrix-operator-system.svc
+        insecureSkipVerify: false
+        ca:
+          secret:
+            name: bitrix-operator-metrics-tls
+            key: ca.crt

@@ -1,0 +1,43 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: bitrix-operator
+  namespace: bitrix-operator-system
+  labels:
+    app.kubernetes.io/name: bitrix-operator
+spec:
+  groups:
+    - name: bitrix-operator
+      rules:
+        - alert: BitrixClusterNotReady
+          expr: max by (kubernetes_cluster, cluster_namespace, cluster) (bitrix_cluster_condition{condition="Ready",status="True"}) == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: BitrixCluster has not been ready for 10 minutes
+            runbook_url: https://github.com/m8-team/bitrix-operator/blob/main/docs/operations.md#cluster-not-ready
+        - alert: BitrixClusterReconcileStalled
+          expr: max by (kubernetes_cluster, cluster_namespace, cluster) (bitrix_cluster_generation) > max by (kubernetes_cluster, cluster_namespace, cluster) (bitrix_cluster_observed_generation)
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: BitrixCluster generation has not been observed for 15 minutes
+            runbook_url: https://github.com/m8-team/bitrix-operator/blob/main/docs/operations.md#reconcile-stalled
+        - alert: BitrixOperatorCollectionFailed
+          expr: bitrix_operator_collection_success == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Bitrix operator cannot read its cluster cache
+            runbook_url: https://github.com/m8-team/bitrix-operator/blob/main/docs/operations.md#metrics-unavailable
+        - alert: BitrixOperatorReconcileErrors
+          expr: rate(controller_runtime_reconcile_errors_total{controller="bitrixcluster"}[5m]) > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Bitrix operator reconciliation errors persist
+            runbook_url: https://github.com/m8-team/bitrix-operator/blob/main/docs/operations.md#reconcile-stalled

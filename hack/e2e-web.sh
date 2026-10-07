@@ -83,6 +83,7 @@ for name in mysql postgresql; do
         test ! -e /run/bitrix-config/manifest.json
     '
 done
+source test/e2e/web/observability.sh
 source test/e2e/web/sites.sh
 # Secret rotation must change the template and converge to ready replicas.
 echo "Checking Secret rotation and data persistence"

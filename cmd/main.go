@@ -31,12 +31,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	bitrixv1alpha1 "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	"github.com/m8-team/bitrix-operator/internal/controller"
+	"github.com/m8-team/bitrix-operator/internal/observability"
 	gateway "sigs.k8s.io/gateway-api/apis/v1"
 	// +kubebuilder:scaffold:imports
 )
@@ -192,6 +194,10 @@ func main() {
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
+	if err := metrics.Registry.Register(observability.NewCollector(mgr.GetCache())); err != nil {
+		setupLog.Error(err, "Failed to register cluster metrics")
+		os.Exit(1)
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "Failed to set up health check")
