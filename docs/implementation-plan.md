@@ -410,6 +410,11 @@ cross-namespace кейс; certificate rotation; отсутствие Gateway CRD
   положительные/отрицательные пробы через Services, DNS TCP/UDP, MySQL/PostgreSQL,
   UID isolation, cross-node и пересоздание Pod; [результат CI и границы](network-policy-tests.md).
 - [ ] 7.4.3: Recovery runbooks и restore drill для выбранных CSI/DB, RPO/RTO.
+  - [x] 7.4.3a: [Runbook и CI drill](recovery.md) для logical MySQL/PostgreSQL backup,
+    uploads, новых CR/PVC и сохранения Secret; целостность копии и измерение времени.
+    Успех E2E подтверждается отдельным workflow на конкретном commit.
+  - [ ] 7.4.3b: Выбрать production CSI/DB backup backend и цели RPO/RTO; проверить
+    off-cluster recovery, реальные объёмы, ключи, licensed Bitrix smoke и cutover.
 
 Готовность: масштабирование не вызывает reconcile fight; проверены outage БД/Redis,
 rotation Secrets, restart operator, rollout errors, node drain и сохранность uploads.

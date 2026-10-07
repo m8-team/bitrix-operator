@@ -12,6 +12,8 @@ HTTP Service, retained uploads PVC и versioned конфиги из родных
 
 - API: `bitrix.m8.team/v1alpha1`, namespaced `BitrixCluster`.
 - [План итераций](docs/implementation-plan.md).
+- [Backup/restore runbook и изолированный recovery drill](docs/recovery.md):
+  MySQL/PostgreSQL + uploads; production CSI/RPO/RTO требуют отдельной проверки.
 - [Границы доверия и opt-in NetworkPolicy](docs/security.md): MySQL/PostgreSQL/manager;
   [Cilium enforcement E2E](docs/network-policy-tests.md) выполняется отдельным workflow.
 - [Foundation: версии, проверки и ограничения](docs/foundation.md).

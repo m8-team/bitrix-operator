@@ -80,5 +80,6 @@ Secrets/ключи. Оператор не выполняет backup/restore, DB 
 Security review и opt-in NetworkPolicy profiles описаны в [security.md](security.md).
 Реальный enforcement проверен на Cilium в итерации 7.4.2:
 [сценарии, результат CI и ограничения](network-policy-tests.md).
-Recovery runbooks и restore drill для выбранных CSI/DB, включая RPO/RTO,
-остаются итерацией 7.4.3.
+[Recovery runbook и logical restore drill](recovery.md) добавлены в 7.4.3a.
+Production CSI/DB backup backend, целевые RPO/RTO и восстановление настоящего Bitrix
+остаются gate 7.4.3b.

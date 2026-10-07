@@ -1,0 +1,31 @@
+# Test-only helper. drill.py supplies the namespace, name, pinned PHP image and claim.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: restore
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  terminationGracePeriodSeconds: 1
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 979
+    runAsGroup: 979
+    fsGroup: 979
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: restore
+      image: supplied-by-drill
+      command: [sh, -ec, "sleep 1800"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: {drop: [ALL]}
+      resources:
+        requests: {cpu: 10m, memory: 16Mi}
+        limits: {cpu: 100m, memory: 64Mi}
+      volumeMounts:
+        - {name: uploads, mountPath: /restore}
+  volumes:
+    - name: uploads
+      persistentVolumeClaim: {claimName: supplied-by-drill}
