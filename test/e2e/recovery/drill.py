@@ -23,7 +23,8 @@ def run(*args, data=None):
     result = subprocess.run(args, input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=400)
     if result.returncode:
         # Do not include stdin, SQL/dump contents or Secret objects in failure output.
-        raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(args[:6])}")
+        detail = result.stderr.decode(errors="replace")[-2000:] if "tar" in args else ""
+        raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(args[:6])} {detail}")
     return result.stdout
 
 
@@ -142,7 +143,7 @@ def main(cluster_name, directory):
         (directory / f"{engine}.json").write_text(json.dumps(sources[engine]))
         # The fixture has no user writes, cron, Push, Gateway or DB event writers.
         sql(SOURCE_DB, engine, "CREATE TABLE recovery_marker (id INTEGER PRIMARY KEY, digest VARCHAR(64) NOT NULL);")
-        web(SOURCE, engine, "sh", "-ec", "cat > /opt/www/upload/checkpoint.txt", data=PAYLOAD)
+        web(SOURCE, engine, "sh", "-ec", "mkdir -m 0750 /opt/www/upload/recovery; cat > /opt/www/upload/recovery/checkpoint.txt", data=PAYLOAD)
         sql(SOURCE_DB, engine, f"INSERT INTO recovery_marker VALUES (1, '{DIGEST}');")
         assert sql(SOURCE_DB, engine, "SELECT digest FROM recovery_marker WHERE id=1;") == DIGEST
     secrets = []
@@ -154,7 +155,7 @@ def main(cluster_name, directory):
     checkpoint = time.time()
     for engine in ENGINES:
         (directory / f"{engine}.dump").write_bytes(database(SOURCE_DB, engine, "dump"))
-        (directory / f"{engine}.tar").write_bytes(web(SOURCE, engine, "tar", "-C", "/opt/www/upload", "-cf", "-", "."))
+        (directory / f"{engine}.tar").write_bytes(web(SOURCE, engine, "tar", "-C", "/opt/www/upload", "-cf", "-", "recovery"))
     seal_bundle(directory, {"checkpoint_unix": checkpoint, "source_pvc_uids": source_pvcs,
                             "source_cr_uids": source_uids})
     # Exercise the actual pre-restore integrity gate against a corrupt uploads archive.
@@ -170,7 +171,7 @@ def main(cluster_name, directory):
     path.write_bytes(original)
     for engine in ENGINES:
         sql(SOURCE_DB, engine, f"INSERT INTO recovery_marker VALUES (2, '{DIGEST}');")
-        web(SOURCE, engine, "sh", "-ec", "echo after-backup > /opt/www/upload/after-backup.txt")
+        web(SOURCE, engine, "sh", "-ec", "echo after-backup > /opt/www/upload/recovery/after-backup.txt")
         assert sql(SOURCE_DB, engine, "SELECT COUNT(*) FROM recovery_marker;") == "2"
     incident = time.time()
     started = time.monotonic()
@@ -222,11 +223,11 @@ def main(cluster_name, directory):
         kubectl(TARGET, "wait", resource, "--for=condition=Ready", "--timeout=180s")
         verify_bundle(directory)
         database(TARGET_DB, engine, "restore", (directory / f"{engine}.dump").read_bytes())
-        # Keep the kubelet-owned mount root's metadata; extracted files belong to UID/GID 979.
-        execute(TARGET, resource, "restore", "tar", "-m", "-o", "--no-same-permissions",
-                "-C", "/restore", "-xf", "-", data=(directory / f"{engine}.tar").read_bytes())
-        assert execute(TARGET, resource, "restore", "cat", "/restore/checkpoint.txt") == PAYLOAD
-        execute(TARGET, resource, "restore", "test", "!", "-e", "/restore/after-backup.txt")
+        # The archive contains a UID 979 subtree, not the kubelet-owned mount root.
+        execute(TARGET, resource, "restore", "tar", "-C", "/restore", "-xf", "-",
+                data=(directory / f"{engine}.tar").read_bytes())
+        assert execute(TARGET, resource, "restore", "cat", "/restore/recovery/checkpoint.txt") == PAYLOAD
+        execute(TARGET, resource, "restore", "test", "!", "-e", "/restore/recovery/after-backup.txt")
         assert sql(TARGET_DB, engine, "SELECT COUNT(*) FROM recovery_marker;") == "1"
         assert sql(TARGET_DB, engine, "SELECT digest FROM recovery_marker WHERE id=1;") == DIGEST
         assert get(TARGET, "pvc", f"{engine}-uploads")["metadata"]["uid"] != source_pvcs[engine]
@@ -242,10 +243,10 @@ def main(cluster_name, directory):
         wait_condition(TARGET, engine, "condition=Ready")
         response = web(TARGET, engine, "wget", "-qO-", "--header=Host: portal.example.com", f"http://{engine}-web/", container="nginx")
         assert response == b"runtime-fixture"
-        restored_bytes = web(TARGET, engine, "cat", "/opt/www/upload/checkpoint.txt")
+        restored_bytes = web(TARGET, engine, "cat", "/opt/www/upload/recovery/checkpoint.txt")
         assert hashlib.sha256(restored_bytes).hexdigest() == sql(TARGET_DB, engine, "SELECT digest FROM recovery_marker WHERE id=1;")
-        web(TARGET, engine, "sh", "-ec", "test ! -e /opt/www/upload/after-backup.txt; echo writable > /opt/www/upload/restore-write-test; rm /opt/www/upload/restore-write-test")
-        assert web(TARGET, engine, "stat", "-c", "%u:%g", "/opt/www/upload/checkpoint.txt").strip() == b"979:979"
+        web(TARGET, engine, "sh", "-ec", "test ! -e /opt/www/upload/recovery/after-backup.txt; echo writable > /opt/www/upload/restore-write-test; rm /opt/www/upload/restore-write-test")
+        assert web(TARGET, engine, "stat", "-c", "%u:%g", "/opt/www/upload/recovery/checkpoint.txt").strip() == b"979:979"
         print(f"PASS {engine}: independent DB/PVC, checkpoint restored, post-backup marker absent, HTTP ready", flush=True)
     report = {"result": "passed", "engines": list(ENGINES), "storage": "kind standard/local-path (not CSI)",
               "checkpoint_unix": checkpoint, "incident_unix": incident,

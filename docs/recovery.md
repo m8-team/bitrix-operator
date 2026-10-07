@@ -110,7 +110,8 @@ Fixtures, backup и credentials синтетические; dumps/Secrets не �
 Вместо лицензированного Bitrix запускается существующий PHP runtime fixture.
 
 - В БД записывается marker с SHA-256 файла uploads. При отсутствии других writers
-  снимаются логические дампы, tar, CR spec и четыре обязательных Secret.
+  снимаются логические дампы, tar каталога fixture `upload/recovery/`, CR spec
+  и четыре обязательных Secret.
 - Повреждённый tar отвергается до импорта. Локальные tests также проверяют повреждение
   DB dumps/ключей, отсутствие файлов, неполный manifest и symlink.
 - После backup создаются второй marker и файл. Затем исходные CR удаляются,
@@ -123,8 +124,9 @@ Fixtures, backup и credentials синтетические; dumps/Secrets не �
 Сценарий не тестирует шифрование Bitrix, KMS, все виды SQL объектов, DB cluster/PITR,
 CSI snapshot/restore, RWX/distributed locking, ACL/xattrs, потерю всего кластера или
 production fencing. Он проверяет путь восстановления из копии и границу данных.
-Fixture распаковывается с UID/GID 979 без восстановления timestamps/permissions
-корня mount; полное сохранение filesystem metadata требует отдельного storage drill.
+Архив содержит только каталог fixture `recovery/`, принадлежащий UID/GID 979,
+а не корень mount, управляемый kubelet. Полное сохранение filesystem metadata
+требует отдельного storage drill.
 
 ## RPO/RTO и оставшийся production gate
 
