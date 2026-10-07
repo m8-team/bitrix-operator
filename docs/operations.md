@@ -78,5 +78,7 @@ Secrets/ключи. Оператор не выполняет backup/restore, DB 
 она может сделать ранее зашифрованные данные недоступными.
 
 Security review и opt-in NetworkPolicy profiles описаны в [security.md](security.md).
-Проверка реального CNI enforcement и recovery для конкретного CSI/DB остаются
-итерациями 7.4.2 и 7.4.3.
+Реальный enforcement проверен на Cilium в итерации 7.4.2:
+[сценарии, результат CI и ограничения](network-policy-tests.md).
+Recovery runbooks и restore drill для выбранных CSI/DB, включая RPO/RTO,
+остаются итерацией 7.4.3.

@@ -2,7 +2,7 @@
 
 Kubernetes operator для коробочного портала и сайтов Bitrix.
 
-**Итерация 7.4.1: security review и сетевые профили.** Оператор создаёт nginx/PHP Deployment,
+**Итерация 7.4.2: NetworkPolicy enforcement проверен на Cilium.** Оператор создаёт nginx/PHP Deployment,
 HTTP Service, retained uploads PVC и versioned конфиги из родных файловых шаблонов.
 Поддержаны внешние MySQL/PostgreSQL и Redis, Secret rotation и статусы rollout.
 [Запуск и ограничения](docs/web-workloads.md). `WebReady` отражает работу web;

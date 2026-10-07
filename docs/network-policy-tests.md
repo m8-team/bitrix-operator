@@ -1,8 +1,15 @@
 # Проверка NetworkPolicy на Cilium
 
 Итерация 7.4.2 добавляет отдельный CI workflow `Network policy enforcement` и
-`bash hack/e2e-network.sh`. Результат конкретного запуска смотрите в GitHub Actions:
-пока job не завершён успешно, наличие сценария не означает подтверждённый enforcement.
+`bash hack/e2e-network.sh`.
+
+Проверено 2026-10-07: [Network policy enforcement, run 37613826474](https://github.com/m8-team/bitrix-operator/actions/runs/37613826474)
+успешно завершён для реализации на commit `e9daf42cb20796a5322ce5198beb6e0c676a8fbc`.
+Прошли оба DB-профиля, разрешённые и запрещённые Service flows, DNS TCP/UDP,
+изоляция Push по UID, перенос web между узлами и пересоздание Pod.
+На том же commit успешно завершены Tests (Kubernetes 1.36/1.37), Lint,
+Runtime contract, Web workloads и Observability. Подтверждение относится к закреплённым
+версиям и сценариям ниже; для изменений проверяйте результат нового запуска CI.
 
 ## Что проверяется
 

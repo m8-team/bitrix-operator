@@ -406,8 +406,9 @@ cross-namespace кейс; certificate rotation; отсутствие Gateway CRD
 - [x] HTTPS monitoring profile и runbooks диагностики; [контракт](observability.md).
 - [x] 7.4.1: Security review, opt-in NetworkPolicy profiles (MySQL/PostgreSQL/manager),
   проверки traffic contract, Pod isolation и RBAC; [границы и внедрение](security.md).
-- [ ] 7.4.2: Проверка реального enforcement на изолированном кластере с CNI:
-  положительные/отрицательные пробы через Services, DNS, cross-node и rollout.
+- [x] 7.4.2: Реальный enforcement проверен на Cilium 1.20.2 / Kubernetes 1.37.0:
+  положительные/отрицательные пробы через Services, DNS TCP/UDP, MySQL/PostgreSQL,
+  UID isolation, cross-node и пересоздание Pod; [результат CI и границы](network-policy-tests.md).
 - [ ] 7.4.3: Recovery runbooks и restore drill для выбранных CSI/DB, RPO/RTO.
 
 Готовность: масштабирование не вызывает reconcile fight; проверены outage БД/Redis,

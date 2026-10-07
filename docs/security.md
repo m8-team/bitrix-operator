@@ -2,7 +2,8 @@
 
 Итерация 7.4.1: review границ доверия, opt-in NetworkPolicy profiles и регрессионные
 проверки. BitrixCluster API/CRD и runtime templates не меняются. Профили требуют
-адаптации к инфраструктуре; CNI enforcement ещё не подтверждён.
+адаптации к инфраструктуре. Итерация 7.4.2 подтверждает enforcement на закреплённом
+Cilium 1.20.2 / Kubernetes 1.37.0; [результат и границы проверки](network-policy-tests.md).
 
 ## Результаты review
 
@@ -117,7 +118,8 @@ enforcement новых policies. Проверки API/CRD и native templates с
 Gate **7.4.2** реализован в [отдельном Cilium E2E](network-policy-tests.md): реальные Service flows
 Gateway → web, DB, Redis, DNS TCP/UDP и Push; отрицательные пробы с неверными
 namespace/labels/UID; повтор после rollout и пересоздания Pod на другом узле.
-Подтверждение зависит от успешного результата workflow на конкретном commit.
+[Workflow успешно завершён](https://github.com/m8-team/bitrix-operator/actions/runs/37613826474)
+для commit `e9daf42cb20796a5322ce5198beb6e0c676a8fbc`; изменения требуют нового успешного запуска.
 Проверять новые соединения после convergence: старые соединения и задержки применения
 зависят от CNI. Ready само по себе не доказывает сетевую изоляцию.
 
