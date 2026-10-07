@@ -2,7 +2,7 @@
 
 Kubernetes operator для коробочного портала и сайтов Bitrix.
 
-**Итерация 7.4.2: NetworkPolicy enforcement проверен на Cilium.** Оператор создаёт nginx/PHP Deployment,
+**Итерация 8.1: Helm chart и установочный YAML.** Оператор создаёт nginx/PHP Deployment,
 HTTP Service, retained uploads PVC и versioned конфиги из родных файловых шаблонов.
 Поддержаны внешние MySQL/PostgreSQL и Redis, Secret rotation и статусы rollout.
 [Запуск и ограничения](docs/web-workloads.md). `WebReady` отражает работу web;
@@ -12,6 +12,7 @@ HTTP Service, retained uploads PVC и versioned конфиги из родных
 
 - API: `bitrix.m8.team/v1alpha1`, namespaced `BitrixCluster`.
 - [План итераций](docs/implementation-plan.md).
+- [Установка, Helm upgrade/rollback и удаление оператора](docs/installation.md).
 - [Backup/restore runbook и изолированный recovery drill](docs/recovery.md):
   MySQL/PostgreSQL + uploads; production CSI/RPO/RTO требуют отдельной проверки.
 - [Границы доверия и opt-in NetworkPolicy](docs/security.md): MySQL/PostgreSQL/manager;

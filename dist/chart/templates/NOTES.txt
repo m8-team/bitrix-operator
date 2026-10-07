@@ -1,0 +1,11 @@
+Operator release: {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+  kubectl get deployment -n {{ .Release.Namespace }}
+  kubectl get bitrixclusters -A
+
+CRDs are cluster-scoped. Helm uninstall preserves CRDs, BitrixCluster objects and uploads PVCs.
+Helm upgrade/rollback does not migrate CRDs or application databases.
+Before an operator upgrade, review compatibility and apply the matching CRD explicitly.
+
+Create application Secrets and configure external DB/Redis, StorageClass and release image
+before creating a BitrixCluster. This chart does not install those dependencies.
