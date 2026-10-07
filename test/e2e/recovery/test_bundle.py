@@ -4,7 +4,21 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from drill import FILES, seal_bundle, verify_bundle
+from drill import FILES, decode_objects, seal_bundle, verify_bundle
+
+
+class ManifestTest(unittest.TestCase):
+    def test_kubectl_json_stream(self):
+        namespace = {"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": "fixture"}}
+        service = {"apiVersion": "v1", "kind": "Service", "metadata": {"name": "dependencies"}}
+        stream = json.dumps(namespace) + "\n" + json.dumps(service) + "\n"
+        self.assertEqual(decode_objects(stream)["items"], [namespace, service])
+        self.assertEqual(decode_objects(json.dumps(service)), service)
+
+    def test_empty_or_truncated_manifest(self):
+        for stream in ("", '{"kind":'):
+            with self.assertRaises(ValueError):
+                decode_objects(stream)
 
 
 class BackupIntegrityTest(unittest.TestCase):

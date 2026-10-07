@@ -41,7 +41,21 @@ def create(obj):
 
 
 def template(path):
-    return json.loads(run("kubectl", "create", "--dry-run=client", "-f", path, "-o", "json"))
+    return decode_objects(run("kubectl", "create", "--dry-run=client", "-f", path, "-o", "json").decode())
+
+
+def decode_objects(output):
+    # kubectl create emits consecutive JSON objects for multi-document YAML, not a List.
+    decoder = json.JSONDecoder()
+    objects = []
+    remaining = output.strip()
+    while remaining:
+        obj, end = decoder.raw_decode(remaining)
+        objects.append(obj)
+        remaining = remaining[end:].strip()
+    if not objects:
+        raise ValueError("Empty manifest")
+    return objects[0] if len(objects) == 1 else {"apiVersion": "v1", "kind": "List", "items": objects}
 
 
 def execute(namespace, resource, container, *args, data=None):
@@ -208,7 +222,9 @@ def main(cluster_name, directory):
         kubectl(TARGET, "wait", resource, "--for=condition=Ready", "--timeout=180s")
         verify_bundle(directory)
         database(TARGET_DB, engine, "restore", (directory / f"{engine}.dump").read_bytes())
-        execute(TARGET, resource, "restore", "tar", "-C", "/restore", "-xf", "-", data=(directory / f"{engine}.tar").read_bytes())
+        # Keep the kubelet-owned mount root's metadata; extracted files belong to UID/GID 979.
+        execute(TARGET, resource, "restore", "tar", "-m", "-o", "--no-same-permissions",
+                "-C", "/restore", "-xf", "-", data=(directory / f"{engine}.tar").read_bytes())
         assert execute(TARGET, resource, "restore", "cat", "/restore/checkpoint.txt") == PAYLOAD
         execute(TARGET, resource, "restore", "test", "!", "-e", "/restore/after-backup.txt")
         assert sql(TARGET_DB, engine, "SELECT COUNT(*) FROM recovery_marker;") == "1"

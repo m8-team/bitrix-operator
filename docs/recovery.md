@@ -123,6 +123,8 @@ Fixtures, backup и credentials синтетические; dumps/Secrets не �
 Сценарий не тестирует шифрование Bitrix, KMS, все виды SQL объектов, DB cluster/PITR,
 CSI snapshot/restore, RWX/distributed locking, ACL/xattrs, потерю всего кластера или
 production fencing. Он проверяет путь восстановления из копии и границу данных.
+Fixture распаковывается с UID/GID 979 без восстановления timestamps/permissions
+корня mount; полное сохранение filesystem metadata требует отдельного storage drill.
 
 ## RPO/RTO и оставшийся production gate
 
