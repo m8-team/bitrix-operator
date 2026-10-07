@@ -1,0 +1,10 @@
+ipam:
+  mode: kubernetes
+operator:
+  replicas: 1
+kubeProxyReplacement: false
+policyEnforcementMode: default
+envoy:
+  enabled: false
+image:
+  pullPolicy: IfNotPresent
