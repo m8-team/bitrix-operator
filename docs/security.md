@@ -128,7 +128,8 @@ namespace/labels/UID; повтор после rollout и пересоздани�
 Откат — к предыдущей проверенной версии overlay; удаление default-deny может открыть
 трафик и не является безопасным универсальным rollback.
 
-**7.4.3**: recovery для выбранных CSI/DB после определения технологий и RPO/RTO.
+**7.4.3a**: [recovery runbook и logical restore drill](recovery.md).
+**7.4.3b**: production recovery для выбранных CSI/DB после определения технологий и RPO/RTO.
 См. [эксплуатацию](operations.md), [Push](push-pull.md), [метрики](observability.md).
 
 Источники review (2026-10-07):

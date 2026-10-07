@@ -1,0 +1,16 @@
+# Only a NEW claim in a NEW namespace; never mutate ownership of retained source PVCs.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: supplied-by-drill
+  labels:
+    app.kubernetes.io/name: bitrix
+    bitrix.m8.team/owner-uid: supplied-by-drill
+  annotations:
+    bitrix.m8.team/cluster-name: supplied-by-drill
+spec:
+  storageClassName: standard
+  accessModes: [ReadWriteOnce]
+  volumeMode: Filesystem
+  resources:
+    requests: {storage: 128Mi}
