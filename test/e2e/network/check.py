@@ -74,6 +74,20 @@ def web_pod():
     return pods[0]
 
 
+def wait_web(previous_uid, node):
+    # Deployment status can briefly still report the deleted Pod as available.
+    deadline = time.monotonic() + 180
+    while time.monotonic() < deadline:
+        pods = json.loads(kubectl("-n", "bitrix-sites", "get", "pods", "-l", "test.bitrix.m8.team/fixture=web", "-o", "json"))["items"]
+        for pod in pods:
+            ready = any(c["type"] == "Ready" and c["status"] == "True" for c in pod.get("status", {}).get("conditions", []))
+            if (pod["metadata"]["uid"] != previous_uid and not pod["metadata"].get("deletionTimestamp")
+                    and pod["spec"].get("nodeName") == node and ready):
+                return pod
+        time.sleep(1)
+    raise AssertionError("replacement web Pod did not become Ready on the expected node")
+
+
 def main():
     mode, cluster = sys.argv[1:]
     ips = {name: kubectl("-n", namespace, "get", "service", name, "-o", "jsonpath={.spec.clusterIP}") for name, (namespace, _) in ROLES.items()}
@@ -99,7 +113,7 @@ def main():
     patch = {"spec": {"template": {"spec": {"nodeSelector": {"kubernetes.io/hostname": cluster + "-control-plane"}}}}}
     kubectl("-n", "bitrix-sites", "patch", "deployment", "web", "--type=merge", "-p", json.dumps(patch))
     kubectl("-n", "bitrix-sites", "rollout", "status", "deployment/web", "--timeout=180s")
-    after = web_pod()
+    after = wait_web(before["metadata"]["uid"], cluster + "-control-plane")
     assert after["metadata"]["uid"] != before["metadata"]["uid"]
     assert after["spec"]["nodeName"] == cluster + "-control-plane"
     for case in matrix(5432):
@@ -108,7 +122,7 @@ def main():
     print("PASS policies after cross-node rollout", flush=True)
     kubectl("-n", "bitrix-sites", "delete", "pod", after["metadata"]["name"], "--wait=true")
     kubectl("-n", "bitrix-sites", "rollout", "status", "deployment/web", "--timeout=180s")
-    recreated = web_pod()
+    recreated = wait_web(after["metadata"]["uid"], cluster + "-control-plane")
     assert recreated["metadata"]["uid"] != after["metadata"]["uid"]
     for case in matrix(5432):
         if "web" in case[:2]:

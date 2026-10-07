@@ -4,6 +4,7 @@ operator:
   replicas: 1
 kubeProxyReplacement: false
 policyEnforcementMode: default
+l7Proxy: false
 envoy:
   enabled: false
 image:

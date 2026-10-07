@@ -3,7 +3,8 @@
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
 for command in kind docker kubectl cilium go python3; do command -v "$command" >/dev/null; done
-cluster="bitrix-network-$(date +%s)-$$"
+# Cilium prefixes the kind name; keep the resulting name within 32 characters.
+cluster="bx-net-$(date +%s)-$$"
 if kind get clusters 2>/dev/null | grep -qx "$cluster"; then
     echo "Refusing to use existing cluster $cluster" >&2
     exit 1

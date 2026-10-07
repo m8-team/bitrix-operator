@@ -13,7 +13,7 @@ HTTP Service, retained uploads PVC и versioned конфиги из родных
 - API: `bitrix.m8.team/v1alpha1`, namespaced `BitrixCluster`.
 - [План итераций](docs/implementation-plan.md).
 - [Границы доверия и opt-in NetworkPolicy](docs/security.md): MySQL/PostgreSQL/manager;
-  реальный CNI enforcement остаётся отдельной проверкой.
+  [Cilium enforcement E2E](docs/network-policy-tests.md) выполняется отдельным workflow.
 - [Foundation: версии, проверки и ограничения](docs/foundation.md).
 - [Архитектурное решение](docs/adr/0001-api-foundation.md).
 - [Исходный контракт](docs/reference/bitrixcluster_types.go.txt) сохранён побайтово
