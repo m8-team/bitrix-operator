@@ -1,0 +1,148 @@
+# Administrator-owned policies; keep operator-owned Push ingress policies.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bitrix-default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bitrix-dns
+spec:
+  podSelector:
+    matchExpressions:
+      - key: bitrix.m8.team/owner-uid
+        operator: Exists
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bitrix-gateway-web
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: bitrix
+    matchExpressions:
+      - key: bitrix.m8.team/owner-uid
+        operator: Exists
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        # Namespace AND Pod selector in a single peer.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: gateway-system
+          podSelector:
+            matchLabels:
+              bitrix.m8.team/traffic-role: gateway
+      ports:
+        - {protocol: TCP, port: 8080}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bitrix-database
+spec:
+  podSelector:
+    matchExpressions:
+      - key: bitrix.m8.team/owner-uid
+        operator: Exists
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [bitrix, bitrix-cron, bitrix-sites]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: bitrix-data
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: bitrix-database
+      ports:
+        - {protocol: TCP, port: 3306}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bitrix-redis
+spec:
+  podSelector:
+    matchExpressions:
+      - key: bitrix.m8.team/owner-uid
+        operator: Exists
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [bitrix, bitrix-cron, bitrix-sites, bitrix-push-publisher, bitrix-push-subscriber]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: bitrix-data
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: bitrix-redis
+      ports:
+        - {protocol: TCP, port: 6379}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bitrix-web-push
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: bitrix
+    matchExpressions:
+      - key: bitrix.m8.team/owner-uid
+        operator: Exists
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: bitrix-push-publisher
+      ports:
+        - {protocol: TCP, port: 9010}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: bitrix-push-subscriber
+      ports:
+        - {protocol: TCP, port: 8010}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bitrix-cron-push
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: bitrix-cron
+    matchExpressions:
+      - key: bitrix.m8.team/owner-uid
+        operator: Exists
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: bitrix-push-publisher
+      ports:
+        - {protocol: TCP, port: 9010}

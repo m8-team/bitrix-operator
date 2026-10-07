@@ -404,7 +404,11 @@ cross-namespace кейс; certificate rotation; отсутствие Gateway CRD
 - [x] PDB ownership/SSA/RBAC, двухузловой kind drain и сохранность uploads; [контракт](disruptions.md).
 - [x] 7.3: Prometheus metrics, dashboard/alerts примеры, Events без секретов.
 - [x] HTTPS monitoring profile и runbooks диагностики; [контракт](observability.md).
-- [ ] 7.4: Security review, NetworkPolicy overlays, recovery runbooks для конкретных CSI/DB.
+- [x] 7.4.1: Security review, opt-in NetworkPolicy profiles (MySQL/PostgreSQL/manager),
+  проверки traffic contract, Pod isolation и RBAC; [границы и внедрение](security.md).
+- [ ] 7.4.2: Проверка реального enforcement на изолированном кластере с CNI:
+  положительные/отрицательные пробы через Services, DNS, cross-node и rollout.
+- [ ] 7.4.3: Recovery runbooks и restore drill для выбранных CSI/DB, RPO/RTO.
 
 Готовность: масштабирование не вызывает reconcile fight; проверены outage БД/Redis,
 rotation Secrets, restart operator, rollout errors, node drain и сохранность uploads.
