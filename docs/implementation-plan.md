@@ -434,6 +434,9 @@ Ready=true только для наблюдаемой текущей generation 
   - [ ] 8.2b: Настроить release environment/tag protection и выполнить первый RC:
     подтвердить GHCR/OIDC/signature verification и установку опубликованного digest.
 - [ ] 8.3: Расширенные examples, dependency maintenance, upgrade matrix и licensed Bitrix smoke.
+  - [x] 8.3a: [Полные Kustomize profiles](examples.md), server-side schema/CEL dry-run,
+    Dependabot, weekly image scan и [compatibility/upgrade matrix](compatibility.md).
+  - [ ] 8.3b: Межверсионный upgrade/rollback двух опубликованных RC и licensed Bitrix smoke.
 
 - Kustomize install, Helm chart, examples: минимальный HTTP, HTTPS portal, multi-site,
   PostgreSQL, HPA, Push и private images.

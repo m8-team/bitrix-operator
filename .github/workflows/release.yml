@@ -1,5 +1,8 @@
 name: Release images
 on:
+  # Weekly rebuild/scan of main catches advisories published after the last merge.
+  schedule:
+    - cron: '23 6 * * 1'
   pull_request:
   push:
     branches: [main]

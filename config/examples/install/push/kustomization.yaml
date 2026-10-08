@@ -1,0 +1,25 @@
+# Apply ../../push-default-deny.yaml in namespace bitrix BEFORE this profile.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base
+patches:
+  - target:
+      kind: BitrixCluster
+    patch: |-
+      apiVersion: bitrix.m8.team/v1alpha1
+      kind: BitrixCluster
+      metadata:
+        name: example
+      spec:
+        runtime:
+          push:
+            enabled: true
+            image: quay.io/bitrix24/push:3.3-v1-alpine@sha256:7ea0b71d66ab6cc9b0b58b6ba853d4398880fdfb1aa19b434a3bf462043bfecc
+            secretRef:
+              name: bitrix-push
+              key: key
+            publisher:
+              replicas: 1
+            subscriber:
+              replicas: 2

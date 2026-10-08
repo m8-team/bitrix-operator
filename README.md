@@ -2,7 +2,7 @@
 
 Kubernetes operator для коробочного портала и сайтов Bitrix.
 
-**Итерация 8.2: multi-arch build и подготовка подписанных релизов.** Оператор создаёт nginx/PHP Deployment,
+**Итерация 8.3a: примеры установки и сопровождение зависимостей.** Оператор создаёт nginx/PHP Deployment,
 HTTP Service, retained uploads PVC и versioned конфиги из родных файловых шаблонов.
 Поддержаны внешние MySQL/PostgreSQL и Redis, Secret rotation и статусы rollout.
 [Запуск и ограничения](docs/web-workloads.md). `WebReady` отражает работу web;
@@ -14,6 +14,8 @@ HTTP Service, retained uploads PVC и versioned конфиги из родных
 - [План итераций](docs/implementation-plan.md).
 - [Установка, Helm upgrade/rollback и удаление оператора](docs/installation.md).
 - [Release CI, SBOM, подписи и проверка образов](docs/releases.md).
+- [Семь полных профилей BitrixCluster](docs/examples.md), [матрица совместимости](docs/compatibility.md)
+  и [обновление зависимостей](docs/dependency-maintenance.md).
 - [Backup/restore runbook и изолированный recovery drill](docs/recovery.md):
   MySQL/PostgreSQL + uploads; production CSI/RPO/RTO требуют отдельной проверки.
 - [Границы доверия и opt-in NetworkPolicy](docs/security.md): MySQL/PostgreSQL/manager;

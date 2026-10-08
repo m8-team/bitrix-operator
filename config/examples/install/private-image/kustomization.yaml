@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base
+patches:
+  - target:
+      kind: BitrixCluster
+    patch: |-
+      apiVersion: bitrix.m8.team/v1alpha1
+      kind: BitrixCluster
+      metadata:
+        name: example
+      spec:
+        release:
+          image:
+            repository: registry.example.com:5443/bitrix/portal
+            tag: "2026.10.1"
+            # Placeholder: replace with the REAL digest of your prepared Bitrix image.
+            digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            pullPolicy: IfNotPresent
+          imagePullSecrets:
+            - name: bitrix-registry

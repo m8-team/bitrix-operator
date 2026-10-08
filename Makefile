@@ -144,6 +144,10 @@ docker-buildx: ## Build and push manager for the supported architectures.
 test-release: ## Validate release policy without registry access.
 	python3 -m unittest discover -s test/release -v
 
+.PHONY: test-examples
+test-examples: kustomize ## Render all complete BitrixCluster installation examples.
+	KUSTOMIZE="$(KUSTOMIZE)" bash hack/test-install-examples.sh
+
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	IMG="$(IMG)" KUSTOMIZE="$(KUSTOMIZE)" bash hack/build-installer.sh

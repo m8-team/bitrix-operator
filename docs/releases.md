@@ -6,7 +6,7 @@
 
 ## Проверка каждого PR
 
-Workflow `Release images` выполняется на PR и push в main с `contents: read`:
+Workflow `Release images` выполняется на PR, push в main и weekly schedule с `contents: read`:
 
 1. Проверяет release policy, затем собирает Linux amd64 и arm64 на native runners.
 2. Использует закреплённые multi-platform digests Go/distroless из Dockerfile,
