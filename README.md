@@ -2,7 +2,7 @@
 
 Kubernetes operator для коробочного портала и сайтов Bitrix.
 
-**Итерация 8.1: Helm chart и установочный YAML.** Оператор создаёт nginx/PHP Deployment,
+**Итерация 8.2: multi-arch build и подготовка подписанных релизов.** Оператор создаёт nginx/PHP Deployment,
 HTTP Service, retained uploads PVC и versioned конфиги из родных файловых шаблонов.
 Поддержаны внешние MySQL/PostgreSQL и Redis, Secret rotation и статусы rollout.
 [Запуск и ограничения](docs/web-workloads.md). `WebReady` отражает работу web;
@@ -13,6 +13,7 @@ HTTP Service, retained uploads PVC и versioned конфиги из родных
 - API: `bitrix.m8.team/v1alpha1`, namespaced `BitrixCluster`.
 - [План итераций](docs/implementation-plan.md).
 - [Установка, Helm upgrade/rollback и удаление оператора](docs/installation.md).
+- [Release CI, SBOM, подписи и проверка образов](docs/releases.md).
 - [Backup/restore runbook и изолированный recovery drill](docs/recovery.md):
   MySQL/PostgreSQL + uploads; production CSI/RPO/RTO требуют отдельной проверки.
 - [Границы доверия и opt-in NetworkPolicy](docs/security.md): MySQL/PostgreSQL/manager;
@@ -96,7 +97,8 @@ Push publisher/subscriber, nginx WebSocket/long polling, signed REST и рота
 [обслуживание узлов и ограничения](docs/disruptions.md).
 Добавлены метрики BitrixCluster, Events и HTTPS-профиль Prometheus с alerts/dashboard;
 [наблюдаемость](docs/observability.md) и [диагностика](docs/operations.md).
-Security review, NetworkPolicy overlays и публикация operator image — следующие этапы.
+Security review и NetworkPolicy overlays реализованы. Release CI подготовлен;
+первый подписанный RC ещё требует отдельного запуска.
 См. также [web workloads](docs/web-workloads.md).
 
 Лицензия: [Apache-2.0](LICENSE).
