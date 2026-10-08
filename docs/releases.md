@@ -21,6 +21,14 @@ Workflow `Release images` выполняется на PR и push в main с `con
 5. Сохраняет успешно проверенный image tar и метаданные в immutable Actions artifact.
    Publish job использует только artifacts текущего run, без повторной сборки.
 
+Первый PR scan обнаружил HIGH CVE-2026-84304 и CVE-2026-84445 в транзитивном
+`google.golang.org/grpc v1.82.1`. Зависимость обновлена до `v1.83.2` вместе с
+требуемыми transitive modules; gate не ослаблен и исключения не добавлены.
+[Advisory 1](https://github.com/grpc/grpc-go/security/advisories/GHSA-vp52-pcj8-j9qc),
+[advisory 2](https://github.com/grpc/grpc-go/security/advisories/GHSA-2v4p-qf9q-27wj).
+Наличие уязвимой версии в inventory само по себе не доказывает достижимость
+конкретного server attack path в операторе; обновление устраняет эту зависимость.
+
 Отчёт Trivy отражает базу уязвимостей на момент запуска, а не бессрочную гарантию.
 SBOM не включает runtime images сайтов, внешние DB/Redis и зависимости самого Bitrix.
 Обновление базовых образов и инструментов проходит через PR с этими проверками.
