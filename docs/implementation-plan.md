@@ -428,6 +428,11 @@ Ready=true только для наблюдаемой текущей generation 
   отдельный install/upgrade/rollback/uninstall/reinstall E2E; [инструкция](installation.md).
   Успех нового E2E подтверждается workflow на конкретном commit.
 - [ ] 8.2: Release image/artifacts, multi-arch, SBOM, signing/provenance и vulnerability scan.
+  - [x] 8.2a: Native amd64/arm64 CI, pinned build inputs, Trivy gate, SPDX,
+    workflow-authored SLSA v1 predicates, tag/main CI policy, Cosign OIDC signing,
+    digest-pinned install assets и draft release; [процесс](releases.md).
+  - [ ] 8.2b: Настроить release environment/tag protection и выполнить первый RC:
+    подтвердить GHCR/OIDC/signature verification и установку опубликованного digest.
 - [ ] 8.3: Расширенные examples, dependency maintenance, upgrade matrix и licensed Bitrix smoke.
 
 - Kustomize install, Helm chart, examples: минимальный HTTP, HTTPS portal, multi-site,
