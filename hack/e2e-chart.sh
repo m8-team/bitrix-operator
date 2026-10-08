@@ -35,6 +35,10 @@ make build-installer IMG=bitrix-operator:e2e
 git diff --exit-code -- config
 kubectl apply -f dist/install.yaml
 kubectl -n bitrix-operator-system rollout status deployment/bitrix-operator-controller-manager --timeout=180s
+# Validate complete installation examples against the real CRD (including CEL).
+kubectl create namespace bitrix
+bash hack/test-install-examples.sh server
+test "$(kubectl -n bitrix get bitrixclusters -o jsonpath='{.items}')" = '[]'
 # Only here: the cluster is empty of user CRs/PVCs. Never use this as a production uninstall command.
 kubectl delete -f dist/install.yaml --ignore-not-found=true --wait=true
 kubectl wait crd/bitrixclusters.bitrix.m8.team --for=delete --timeout=120s
