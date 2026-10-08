@@ -10,7 +10,9 @@ mkdir -p release-assets
 
 # A reservation draft makes retries fail closed instead of overwriting a partial release.
 # Version tags and the release environment must additionally be protected in repository settings.
-gh release create "$tag" --verify-tag --draft --title "$tag" \
+prerelease=false
+if [[ "$tag" == *-rc.* ]]; then prerelease=true; fi
+gh release create "$tag" --verify-tag --draft --prerelease="$prerelease" --title "$tag" \
   --notes 'Release assembly in progress. Do not publish this draft until this workflow succeeds.'
 
 refs=()
