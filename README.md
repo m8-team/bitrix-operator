@@ -1,33 +1,124 @@
 # Bitrix Operator
 
-Kubernetes operator для коробочного портала и сайтов Bitrix.
+Bitrix Operator запускает и обслуживает коробочный портал или сайты «1С-Битрикс» в Kubernetes. Вы описываете приложение в ресурсе `BitrixCluster`: образ с кодом, домены сайтов, подключения к БД и Redis, хранилище и нужные компоненты. Оператор создаёт ресурсы Kubernetes и обновляет их при изменении настроек.
 
-**Итерация 8.3a: примеры установки и сопровождение зависимостей.** Оператор создаёт nginx/PHP Deployment,
-HTTP Service, retained uploads PVC и versioned конфиги из родных файловых шаблонов.
-Поддержаны внешние MySQL/PostgreSQL и Redis, Secret rotation и статусы rollout.
-[Запуск и ограничения](docs/web-workloads.md). `WebReady` отражает работу web;
-общий `Ready=False` до проверки site IDs через ядро Bitrix.
+Проект рассчитан на установку, в которой код приложения собирается в контейнерный образ, а база данных, Redis и файловое хранилище обслуживаются отдельно. Установку Bitrix и обновления ядра нужно выполнять при подготовке приложения. Код в работающих контейнерах доступен только для чтения.
 
-## API и разработка
+## Возможности
 
-- API: `bitrix.m8.team/v1alpha1`, namespaced `BitrixCluster`.
-- [План итераций](docs/implementation-plan.md).
-- [Установка, Helm upgrade/rollback и удаление оператора](docs/installation.md).
-- [Release CI, SBOM, подписи и проверка образов](docs/releases.md).
-- [Семь полных профилей BitrixCluster](docs/examples.md), [матрица совместимости](docs/compatibility.md)
-  и [обновление зависимостей](docs/dependency-maintenance.md).
-- [Backup/restore runbook и изолированный recovery drill](docs/recovery.md):
-  MySQL/PostgreSQL + uploads; production CSI/RPO/RTO требуют отдельной проверки.
-- [Границы доверия и opt-in NetworkPolicy](docs/security.md): MySQL/PostgreSQL/manager;
-  [Cilium enforcement E2E](docs/network-policy-tests.md) выполняется отдельным workflow.
-- [Foundation: версии, проверки и ограничения](docs/foundation.md).
-- [Архитектурное решение](docs/adr/0001-api-foundation.md).
-- [Исходный контракт](docs/reference/bitrixcluster_types.go.txt) сохранён побайтово
-  в [api/v1alpha1/bitrixcluster_types.go](api/v1alpha1/bitrixcluster_types.go).
-- [Пример HTTP без TLS](config/samples/bitrix_v1alpha1_bitrixcluster.yaml).
+- Запуск nginx и PHP-FPM, проверка доступности БД и Redis, обновление контейнеров при смене образа или Secrets.
+- Несколько сайтов с выбором `SITE_ID` по домену. Сайты используют общий код и каталог загрузок.
+- Постоянное хранилище для `upload`. При удалении `BitrixCluster` PVC с загрузками сохраняется.
+- Отдельный процесс для запуска агентов по расписанию и сервер Push & Pull.
+- Публикация сайтов через Gateway API с завершением TLS на Gateway.
+- Автомасштабирование web-компонента через HPA, PodDisruptionBudget и корректное завершение nginx/PHP при остановке Pod.
 
-Нужны Go **1.26.8**, make, git и доступ к Go modules/GitHub releases.
-`make test` запускает локальные etcd и kube-apiserver через envtest, Docker не нужен.
+Агенты, Push, Gateway и автомасштабирование включаются отдельно. Для внутреннего HTTP-доступа Gateway не нужен.
+
+## Перед запуском
+
+Подготовьте:
+
+- Kubernetes-кластер и доступ к нему через `kubectl`.
+- Образ с готовым приложением Bitrix. Требования к структуре образа и подготовке PHP-настроек описаны в [контракте runtime](docs/runtime-contract.md).
+- Доступные из кластера MySQL или PostgreSQL и Redis с паролем.
+- StorageClass для пользовательских загрузок. Несколько web-реплик требуют `ReadWriteMany`; с `ReadWriteOnce` или `ReadWriteOncePod` поддерживается одна реплика, а обновления проходят с простоем.
+- Secrets с лицензией, ключом Bitrix Crypto и паролями подключений в том же namespace, что и `BitrixCluster`.
+
+Для внешнего HTTP/HTTPS-доступа дополнительно нужны Gateway API CRDs, работающий Gateway controller и настроенный Gateway. DNS, сертификаты и разрешения между namespaces подготавливаются отдельно. Подробности — в [инструкции по Gateway и TLS](docs/gateway-tls.md).
+
+Проект находится в разработке. Публичный образ оператора пока не опубликован — его нужно собрать самостоятельно. Перед использованием с рабочими данными проверьте свой образ Bitrix, модули приложения и storage driver в тестовом окружении. Тесты проекта используют синтетическое приложение и не подтверждают совместимость любой сборки Bitrix.
+
+## Установка оператора
+
+Для сборки нужны Go **1.26.8**, Docker, make и git. Инструменты генерации и Kustomize устанавливаются через Makefile; потребуется доступ к Go modules и GitHub releases.
+
+```sh
+git clone https://github.com/m8-team/bitrix-operator.git
+cd bitrix-operator
+
+# Укажите свой registry и тег образа.
+export IMG=registry.example.com/bitrix-operator:dev
+make docker-build docker-push IMG="$IMG"
+```
+
+Убедитесь, что выбран нужный Kubernetes-кластер, затем установите оператор:
+
+```sh
+kubectl config current-context
+make deploy IMG="$IMG"
+kubectl -n bitrix-operator-system rollout status deployment/bitrix-operator-controller-manager
+```
+
+`make deploy` устанавливает CRD и оператор в namespace `bitrix-operator-system`. Узлам кластера должен быть доступен собранный образ. Для приватного registry отдельно настройте доступ к нему. Admission webhook и cert-manager для самого оператора не требуются.
+
+## Запуск приложения
+
+В [примере BitrixCluster](config/samples/bitrix_v1alpha1_bitrixcluster.yaml) показана установка с внутренним HTTP-доступом, MySQL, Redis и RWX-хранилищем. Скопируйте пример и замените образ приложения, домен, адреса сервисов, имена Secrets и StorageClass:
+
+```sh
+cp config/samples/bitrix_v1alpha1_bitrixcluster.yaml bitrixcluster.yaml
+kubectl create namespace bitrix
+```
+
+Создайте необходимые Secrets в namespace `bitrix` своим обычным способом управления секретами. Не сохраняйте их значения в манифесте приложения или Git. После настройки примените файл:
+
+```sh
+kubectl -n bitrix apply -f bitrixcluster.yaml
+kubectl -n bitrix get bitrixclusters
+kubectl -n bitrix wait bitrixcluster/example --for=condition=Ready --timeout=300s
+```
+
+В примере ресурс называется `example`. Его HTTP Service — `example-web`, порт 80. Для проверки внутреннего доступа:
+
+```sh
+kubectl -n bitrix port-forward service/example-web 8080:80
+```
+
+В другом терминале отправьте запрос с доменом из `spec.sites[].hosts`:
+
+```sh
+curl -H 'Host: portal.example.com' http://127.0.0.1:8080/
+```
+
+Домен должен соответствовать сайту, который уже существует в Bitrix. Оператор проверяет указанные site IDs через ядро приложения; неизвестные домены nginx не обслуживает.
+
+## Проверка состояния
+
+Если приложение не выходит в готовность, посмотрите условия и события ресурса:
+
+```sh
+kubectl -n bitrix describe bitrixcluster example
+kubectl -n bitrix get bitrixcluster example -o yaml
+kubectl -n bitrix-operator-system logs deployment/bitrix-operator-controller-manager -c manager
+```
+
+`WebReady` показывает готовность web-реплик и хранилища. Проверка внутри Pod включает подключения к БД и Redis. Общий `Ready` также учитывает проверку сайтов и готовность включённых компонентов. Готовность Gateway не подтверждает, что DNS настроен и сайт доступен из внешней сети.
+
+Изменяйте настройки через `BitrixCluster`: ручные изменения образов, конфигурации или числа реплик управляемых Deployment оператор восстановит. При включённом HPA число web-реплик задаёт автомасштабирование.
+
+## Данные и ограничения
+
+Удаление `BitrixCluster` сохраняет PVC с загрузками, но не заменяет резервное копирование. Новый ресурс с тем же именем не присваивает старый PVC автоматически. Восстановление данных нужно планировать отдельно; [правила работы с хранилищем](docs/web-workloads.md#storage-и-жизненный-цикл) описывают этот случай.
+
+Оператор не устанавливает Bitrix, не выполняет миграции БД и не создаёт резервные копии. TLS к внешним БД и Redis пока не поддерживается. Сайты разделяются по доменам; переключение по URL-папкам не реализовано. Для агентов нужна общая RWX-файловая система с работающей межузловой блокировкой `flock` и предварительная настройка Bitrix.
+
+## Настройка компонентов
+
+| Задача | Документация |
+| --- | --- |
+| Подготовить образ приложения и PHP-настройки | [Runtime contract](docs/runtime-contract.md) |
+| Настроить web и хранилище загрузок | [Web workloads](docs/web-workloads.md) |
+| Подключить сайты и проверить site IDs | [Сайты](docs/sites.md) |
+| Запускать агенты по расписанию | [Cron и агенты](docs/cron-agents.md) |
+| Включить Push & Pull | [Push & Pull](docs/push-pull.md) |
+| Опубликовать сайты по HTTP/HTTPS | [Gateway и TLS](docs/gateway-tls.md) |
+| Настроить автомасштабирование | [HPA](docs/autoscaling.md) |
+| Настроить поведение при обслуживании узлов | [PDB и завершение запросов](docs/disruptions.md) |
+
+## Разработка
+
+API: `bitrix.m8.team/v1alpha1`, ресурс `BitrixCluster` в пределах namespace.
 
 ```sh
 make build
@@ -36,80 +127,16 @@ make lint-config lint
 make verify-generated
 ```
 
-Дополнительная проверка предыдущего Kubernetes minor:
+`make test` запускает локальные etcd и kube-apiserver через envtest; Docker для этих тестов не нужен. Проверки выполняются на Kubernetes 1.37.0. Для предыдущей версии:
 
 ```sh
 make test ENVTEST_K8S_VERSION=1.36.0
 ```
 
-Установка закреплённого Kubebuilder CLI для дальнейшего scaffold (Linux amd64/arm64,
-с проверкой SHA-256):
+Для запуска оператора с локальной машины используйте `make install` и `make run` с kubeconfig тестового кластера. Проверки web-компонентов в отдельном Kind-кластере запускаются через `bash hack/e2e-web.sh`; требования перечислены в [документации](docs/web-workloads.md#проверки-и-границы).
 
-```sh
-bash hack/install-kubebuilder.sh
-export PATH="$PWD/bin:$PATH"
-kubebuilder version
-```
+Закреплённые версии инструментов и устройство проекта описаны в [foundation](docs/foundation.md). Дальнейшие задачи — в [плане разработки](docs/implementation-plan.md).
 
-## Локальная проверка с отдельным Kubernetes-кластером
+## Лицензия
 
-Следующие команды используют **текущий kubeconfig context**. Выберите тестовый кластер.
-
-```sh
-make install
-# В отдельном терминале; заранее подготовьте release image, Secrets, БД/Redis и StorageClass.
-make run
-kubectl apply -k config/samples
-kubectl get bitrixclusters
-kubectl get bitrixcluster example -o yaml
-```
-
-Пример содержит ссылки на Secrets и внешние DB/Redis, но credentials в Git не хранит.
-Release image, StorageClass и endpoints нужно заменить своими значениями. `sites[].tls` необязателен; наличие HTTPS listener
-проверяется контроллером Gateway, а не текущей схемой.
-
-Чтобы запустить manager в кластере, соберите собственный образ:
-
-```sh
-make docker-build docker-push IMG=registry.example.com/bitrix-operator:dev
-make deploy IMG=registry.example.com/bitrix-operator:dev
-```
-
-`controller:dev` в Kustomize — placeholder, опубликованного образа пока нет.
-Manager использует leader election, non-root, read-only root filesystem, seccomp,
-health probes и защищённые metrics. Admission webhook и cert-manager не требуются.
-По умолчанию metrics используют self-signed TLS; для production задаётся сертификат.
-
-## Границы текущей итерации
-
-CI: форматирование, Go modules, build/vet/lint, API contract, envtest на 1.36.0/1.37.0,
-повторная генерация CRD/RBAC/deepcopy и сборка Kustomize. Добавлены native nginx/PHP
-проверки и kind E2E для web/storage с внешними MySQL/PostgreSQL/Redis.
-Cron/agents реализованы отдельным singleton Deployment с native PHP scheduler.
-Требования к RWX, подготовке Bitrix и гарантии блокировки — [cron и agents](docs/cron-agents.md).
-Push publisher/subscriber, nginx WebSocket/long polling, signed REST и ротация ключа
-реализованы; [включение и границы доверия](docs/push-pull.md).
-Реализованы Host → SITE_ID, validation Jobs и проверка текущего runtime перед Ready;
-[контракт и ограничения проверки сайтов](docs/sites.md).
-Реализованы HTTPRoute, Gateway/TLS, проверки сертификатов и ReferenceGrant;
-[подключение и ограничения публикации](docs/gateway-tls.md).
-Добавлен HPA v2 с передачей владения replicas и проверкой requests/RWX;
-[настройка и ограничения autoscaling](docs/autoscaling.md).
-Добавлены web PDB, предпочтительное размещение по узлам и согласованное завершение nginx/PHP;
-[обслуживание узлов и ограничения](docs/disruptions.md).
-Добавлены метрики BitrixCluster, Events и HTTPS-профиль Prometheus с alerts/dashboard;
-[наблюдаемость](docs/observability.md) и [диагностика](docs/operations.md).
-Security review и NetworkPolicy overlays реализованы. Release CI подготовлен;
-первый подписанный RC ещё требует отдельного запуска.
-См. также [web workloads](docs/web-workloads.md).
-
-Лицензия: [Apache-2.0](LICENSE).
-
-## Runtime contract (итерация 2)
-
-Добавлены renderer nginx/PHP/Bitrix, PHP-only Secret projections, подготовка
-release image и Docker-проверки конфигураций. Подробности и ограничения —
-[docs/runtime-contract.md](docs/runtime-contract.md).
-
-Конфигурации компонентов находятся в [internal/runtime/templates](internal/runtime/templates/README.md).
-Go выполняет подстановку проверенных параметров; нативные PHP-файлы копируются без обработки.
+[Apache-2.0](LICENSE). Лицензия на само приложение Bitrix приобретается отдельно.
