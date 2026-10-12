@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base
+patches:
+  - target:
+      kind: BitrixCluster
+    patch: |-
+      apiVersion: bitrix.m8.team/v1alpha1
+      kind: BitrixCluster
+      metadata:
+        name: example
+      spec:
+        sites:
+          - id: s1
+            hosts: [portal.example.com]
+          - id: s2
+            hosts: [shop.example.com, www.shop.example.com]

@@ -1,0 +1,45 @@
+# One cluster-wide operator installation per Kubernetes cluster.
+nameOverride: ""
+fullnameOverride: ""
+manager:
+  enabled: true
+  replicas: 1
+  image:
+    # Required: registry.example.com/bitrix-operator:version or repository@sha256:...
+    # No public release image is published yet.
+    reference: ""
+    pullPolicy: IfNotPresent
+  args:
+    - --leader-elect
+  healthProbe:
+    port: 8081
+  imagePullSecrets: []
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile: {type: RuntimeDefault}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities: {drop: [ALL]}
+    readOnlyRootFilesystem: true
+  resources:
+    limits: {cpu: 500m, memory: 128Mi}
+    requests: {cpu: 10m, memory: 64Mi}
+  affinity: {}
+  nodeSelector: {}
+  tolerations: []
+  terminationGracePeriodSeconds: 10
+rbac:
+  # Namespace-scoped watching is not implemented by this manager.
+  namespaced: false
+  helpers:
+    enabled: false
+serviceAccount:
+  enabled: true
+  # Required only when enabled=false; the selected SA must be in the release namespace.
+  name: ""
+metrics:
+  enabled: true
+  port: 8443
+  secure: true
+# CRDs use Helm's crds/ directory: installed once, not upgraded or removed by Helm.
+# Monitoring and NetworkPolicy profiles are applied separately from config/.

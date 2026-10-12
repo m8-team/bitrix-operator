@@ -1,0 +1,11 @@
+# Object-retention fixture only; deliberately unbound (no consumer Pod).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: retained-data
+  namespace: bitrix-chart-data
+spec:
+  storageClassName: standard
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: {storage: 1Mi}

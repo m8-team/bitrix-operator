@@ -4,7 +4,8 @@
 см. docs/web-workloads.md. Итерация 4 реализует cron и agents; см. docs/cron-agents.md.
 Итерация 5 реализует Push & Pull; см. docs/push-pull.md.
 Итерация 6: Sites, Gateway API и TLS реализована; итерация 7.1 добавляет autoscaling web;
-7.2 — PDB, topology и graceful drain; эксплуатационные задачи продолжаются в 7.3.
+7.2 — PDB, topology и graceful drain; 7.3 — наблюдаемость и диагностика;
+эксплуатационные задачи продолжаются в 7.4.
 Репозиторий: https://github.com/m8-team/bitrix-operator
 Go module: github.com/m8-team/bitrix-operator
 
@@ -401,15 +402,41 @@ cross-namespace кейс; certificate rotation; отсутствие Gateway CRD
 - [x] Envtest и kind CPU autoscaling сценарий; [контракт](autoscaling.md).
 - [x] 7.2: web PDB, topology по узлам, readiness при drain, согласованный graceful nginx/PHP stop.
 - [x] PDB ownership/SSA/RBAC, двухузловой kind drain и сохранность uploads; [контракт](disruptions.md).
-- [ ] 7.3: остальные задачи эксплуатации ниже.
-- Prometheus metrics, dashboard/alerts примеры, Events без секретов.
-- Security review, NetworkPolicy overlays, recovery runbooks.
+- [x] 7.3: Prometheus metrics, dashboard/alerts примеры, Events без секретов.
+- [x] HTTPS monitoring profile и runbooks диагностики; [контракт](observability.md).
+- [x] 7.4.1: Security review, opt-in NetworkPolicy profiles (MySQL/PostgreSQL/manager),
+  проверки traffic contract, Pod isolation и RBAC; [границы и внедрение](security.md).
+- [x] 7.4.2: Реальный enforcement проверен на Cilium 1.20.2 / Kubernetes 1.37.0:
+  положительные/отрицательные пробы через Services, DNS TCP/UDP, MySQL/PostgreSQL,
+  UID isolation, cross-node и пересоздание Pod; [результат CI и границы](network-policy-tests.md).
+- [ ] 7.4.3: Recovery runbooks и restore drill для выбранных CSI/DB, RPO/RTO.
+  - [x] 7.4.3a: [Runbook и CI drill](recovery.md) для logical MySQL/PostgreSQL backup,
+    uploads, новых CR/PVC и сохранения Secret; целостность копии и измерение времени.
+    [E2E прошёл](https://github.com/m8-team/bitrix-operator/actions/runs/37654127499):
+    восстановление обеих БД/uploads за 49,163 секунды на маленьком fixture.
+  - [ ] 7.4.3b: Выбрать production CSI/DB backup backend и цели RPO/RTO; проверить
+    off-cluster recovery, реальные объёмы, ключи, licensed Bitrix smoke и cutover.
 
 Готовность: масштабирование не вызывает reconcile fight; проверены outage БД/Redis,
 rotation Secrets, restart operator, rollout errors, node drain и сохранность uploads.
 Ready=true только для наблюдаемой текущей generation и обязательных компонентов.
 
 ### 8. Packaging и первый release
+
+- [x] 8.1: Helm scaffold через Kubebuilder, chart с отдельным CRD lifecycle,
+  установочный YAML без изменения исходных manifests, проверки render/RBAC и
+  отдельный install/upgrade/rollback/uninstall/reinstall E2E; [инструкция](installation.md).
+  Успех нового E2E подтверждается workflow на конкретном commit.
+- [ ] 8.2: Release image/artifacts, multi-arch, SBOM, signing/provenance и vulnerability scan.
+  - [x] 8.2a: Native amd64/arm64 CI, pinned build inputs, Trivy gate, SPDX,
+    workflow-authored SLSA v1 predicates, tag/main CI policy, Cosign OIDC signing,
+    digest-pinned install assets и draft release; [процесс](releases.md).
+  - [ ] 8.2b: Настроить release environment/tag protection и выполнить первый RC:
+    подтвердить GHCR/OIDC/signature verification и установку опубликованного digest.
+- [ ] 8.3: Расширенные examples, dependency maintenance, upgrade matrix и licensed Bitrix smoke.
+  - [x] 8.3a: [Полные Kustomize profiles](examples.md), server-side schema/CEL dry-run,
+    Dependabot, weekly image scan и [compatibility/upgrade matrix](compatibility.md).
+  - [ ] 8.3b: Межверсионный upgrade/rollback двух опубликованных RC и licensed Bitrix smoke.
 
 - Kustomize install, Helm chart, examples: минимальный HTTP, HTTPS portal, multi-site,
   PostgreSQL, HPA, Push и private images.

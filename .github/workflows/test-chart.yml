@@ -1,0 +1,36 @@
+name: Install artifacts
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: chart-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  kind:
+    name: Kustomize and Helm lifecycle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Install pinned Helm and kind
+        run: |
+          bash hack/install-helm.sh
+          curl -fsSLo /tmp/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64
+          echo 'aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d  /tmp/kind' | sha256sum -c -
+          chmod +x /tmp/kind
+          sudo mv /tmp/kind /usr/local/bin/kind
+      - name: Check chart and generated sources
+        run: |
+          make test-chart
+          make build-installer IMG=controller:dev
+          git diff --exit-code -- api config dist
+      - name: Exercise installer, upgrade, rollback, uninstall and reinstall
+        run: bash hack/e2e-chart.sh

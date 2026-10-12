@@ -1,0 +1,32 @@
+name: Network policy enforcement
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: network-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  cilium:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Install pinned kind and Cilium CLI
+        run: |
+          curl -fsSLo /tmp/kind https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64
+          echo 'aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d  /tmp/kind' | sha256sum -c -
+          chmod +x /tmp/kind
+          sudo mv /tmp/kind /usr/local/bin/kind
+          curl -fsSLo /tmp/cilium.tar.gz https://github.com/cilium/cilium-cli/releases/download/v0.20.1/cilium-linux-amd64.tar.gz
+          echo '24e817dcfcc8a12e325ce7547617bcbcf171c5b0b335bb24d2bb1207ba047f61  /tmp/cilium.tar.gz' | sha256sum -c -
+          sudo tar --no-same-owner -xzf /tmp/cilium.tar.gz -C /usr/local/bin cilium
+      - name: Verify policy enforcement on a fresh two-node Cilium cluster
+        run: bash hack/e2e-network.sh

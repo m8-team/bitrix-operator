@@ -1,0 +1,1068 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: bitrixclusters.bitrix.m8.team
+spec:
+  group: bitrix.m8.team
+  names:
+    categories:
+    - all
+    kind: BitrixCluster
+    listKind: BitrixClusterList
+    plural: bitrixclusters
+    shortNames:
+    - bxcluster
+    - bxcl
+    singular: bitrixcluster
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.release.image.tag
+      name: Tag
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: BitrixCluster is the Schema for the bitrixclusters API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec defines the desired state of BitrixCluster.
+            properties:
+              crypto:
+                description: Crypto references the Secret key containing the Bitrix
+                  encryption key.
+                properties:
+                  secretRef:
+                    description: SecretRef selects the Secret name and data key.
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                required:
+                - secretRef
+                type: object
+              database:
+                description: Database configures connections rendered into the Bitrix
+                  application settings.
+                properties:
+                  connections:
+                    description: Connections is the set of named Bitrix database connections.
+                    items:
+                      description: DatabaseConnectionSpec configures one named Bitrix
+                        database connection.
+                      properties:
+                        database:
+                          description: Database is the database name.
+                          minLength: 1
+                          type: string
+                        host:
+                          description: Host is the database DNS name or IP address.
+                          minLength: 1
+                          type: string
+                        name:
+                          description: Name is the connection name used in Bitrix
+                            settings.
+                          minLength: 1
+                          pattern: ^[A-Za-z0-9_.-]+$
+                          type: string
+                        options:
+                          description: Options contains database-specific Bitrix connection
+                            options.
+                          properties:
+                            charset:
+                              description: Charset configures the database connection
+                                charset.
+                              type: string
+                            timezone:
+                              description: Timezone configures the database session
+                                timezone.
+                              type: string
+                          type: object
+                        passwordSecretRef:
+                          description: PasswordSecretRef selects the database password.
+                          properties:
+                            key:
+                              description: The key of the secret to select from.  Must
+                                be a valid secret key.
+                              type: string
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                            optional:
+                              description: Specify whether the Secret or its key must
+                                be defined
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        port:
+                          description: Port is the database TCP port.
+                          format: int32
+                          maximum: 65535
+                          minimum: 1
+                          type: integer
+                        username:
+                          description: Username is the database user name.
+                          minLength: 1
+                          type: string
+                      required:
+                      - database
+                      - host
+                      - name
+                      - passwordSecretRef
+                      - port
+                      - username
+                      type: object
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  engine:
+                    description: Engine is the database engine shared by the configured
+                      connections.
+                    enum:
+                    - MySQL
+                    - PostgreSQL
+                    type: string
+                required:
+                - connections
+                - engine
+                type: object
+                x-kubernetes-validations:
+                - message: exactly one database connection must be named default
+                  rule: self.connections.filter(c, c.name == 'default').size() ==
+                    1
+              license:
+                description: License references the Secret key containing the Bitrix
+                  license value.
+                properties:
+                  secretRef:
+                    description: SecretRef selects the Secret name and data key.
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                required:
+                - secretRef
+                type: object
+              networking:
+                description: |-
+                  Networking optionally configures publication through Kubernetes Gateway API.
+                  When omitted, Gateway API resources are not created.
+                properties:
+                  gateway:
+                    description: Gateway optionally configures publication through
+                      Kubernetes Gateway API.
+                    properties:
+                      enabled:
+                        description: Enabled controls creation of HTTPRoute resources.
+                        type: boolean
+                      parentRef:
+                        description: |-
+                          ParentRef identifies the Gateway and listener used by generated routes.
+                          It may be omitted when Gateway API publication is disabled.
+                        properties:
+                          name:
+                            description: Name is the Gateway resource name.
+                            minLength: 1
+                            type: string
+                          namespace:
+                            description: Namespace is the Gateway resource namespace.
+                            minLength: 1
+                            type: string
+                          sectionName:
+                            description: SectionName selects a listener on the Gateway.
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        - namespace
+                        - sectionName
+                        type: object
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - message: parentRef is required when gateway is enabled
+                      rule: '!self.enabled || has(self.parentRef)'
+                type: object
+              redis:
+                description: Redis configures the shared Redis endpoint used by cache
+                  and sessions.
+                properties:
+                  cache:
+                    description: Cache configures Redis-backed Bitrix cache.
+                    properties:
+                      sid:
+                        description: SID is the unique cache namespace identifier
+                          used by Bitrix.
+                        minLength: 1
+                        type: string
+                    required:
+                    - sid
+                    type: object
+                  host:
+                    description: Host is the Redis DNS name or IP address.
+                    minLength: 1
+                    type: string
+                  passwordSecretRef:
+                    description: PasswordSecretRef selects the Redis password.
+                    properties:
+                      key:
+                        description: The key of the secret to select from.  Must be
+                          a valid secret key.
+                        type: string
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                      optional:
+                        description: Specify whether the Secret or its key must be
+                          defined
+                        type: boolean
+                    required:
+                    - key
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  port:
+                    description: Port is the Redis TCP port.
+                    format: int32
+                    maximum: 65535
+                    minimum: 1
+                    type: integer
+                  sessions:
+                    description: Sessions configures Redis-backed PHP sessions.
+                    properties:
+                      mode:
+                        description: Mode configures the Bitrix session storage mode.
+                        minLength: 1
+                        type: string
+                      ttl:
+                        description: TTL is the session lifetime in seconds.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                    required:
+                    - mode
+                    - ttl
+                    type: object
+                required:
+                - cache
+                - host
+                - passwordSecretRef
+                - port
+                - sessions
+                type: object
+              release:
+                description: Release defines the immutable application image deployed
+                  by the operator.
+                properties:
+                  image:
+                    description: Image identifies the immutable Bitrix application
+                      release.
+                    properties:
+                      digest:
+                        description: |-
+                          Digest pins the image to immutable content. The controller should prefer the
+                          digest over the tag when both are specified.
+                        pattern: ^sha256:[a-fA-F0-9]+$
+                        type: string
+                      pullPolicy:
+                        default: IfNotPresent
+                        description: PullPolicy controls when Kubernetes pulls the
+                          image.
+                        enum:
+                        - Always
+                        - IfNotPresent
+                        - Never
+                        type: string
+                      repository:
+                        description: Repository is the image repository without a
+                          tag or digest.
+                        minLength: 1
+                        type: string
+                      tag:
+                        description: Tag is the human-readable release version.
+                        minLength: 1
+                        pattern: ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$
+                        type: string
+                    required:
+                    - repository
+                    - tag
+                    type: object
+                  imagePullSecrets:
+                    description: ImagePullSecrets lists Secrets used to pull the release
+                      image.
+                    items:
+                      description: |-
+                        LocalObjectReference contains enough information to let you locate the
+                        referenced object inside the same namespace.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    type: array
+                required:
+                - image
+                type: object
+              runtime:
+                description: Runtime configures web, cron, agents, and Push & Pull
+                  workloads.
+                properties:
+                  cron:
+                    description: Cron configures the singleton cron and Bitrix agents
+                      workload.
+                    properties:
+                      agents:
+                        description: |-
+                          Agents configures execution of Bitrix agents by cron.
+                          It may be omitted when cron is disabled.
+                        properties:
+                          enabled:
+                            description: Enabled controls periodic Bitrix agent execution.
+                            type: boolean
+                          interval:
+                            description: Interval is the interval between agent executions.
+                            type: string
+                        required:
+                        - enabled
+                        - interval
+                        type: object
+                      enabled:
+                        description: Enabled controls creation of the singleton cron
+                          workload.
+                        type: boolean
+                    required:
+                    - enabled
+                    type: object
+                    x-kubernetes-validations:
+                    - message: agents is required when cron is enabled
+                      rule: '!self.enabled || has(self.agents)'
+                  push:
+                    description: |-
+                      Push configures optional Bitrix Push & Pull publisher and subscriber workloads.
+                      When omitted, Push & Pull is disabled.
+                    properties:
+                      enabled:
+                        description: Enabled controls creation of Push & Pull workloads.
+                        type: boolean
+                      image:
+                        description: Image is the Push & Pull OCI image.
+                        minLength: 1
+                        type: string
+                      publisher:
+                        description: Publisher configures Push & Pull publisher replicas.
+                        properties:
+                          replicas:
+                            description: Replicas is the desired number of replicas.
+                            format: int32
+                            minimum: 1
+                            type: integer
+                        required:
+                        - replicas
+                        type: object
+                      secretRef:
+                        description: SecretRef selects the Push & Pull shared secret.
+                        properties:
+                          key:
+                            description: The key of the secret to select from.  Must
+                              be a valid secret key.
+                            type: string
+                          name:
+                            default: ""
+                            description: |-
+                              Name of the referent.
+                              This field is effectively required, but due to backwards compatibility is
+                              allowed to be empty. Instances of this type with an empty value here are
+                              almost certainly wrong.
+                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            type: string
+                          optional:
+                            description: Specify whether the Secret or its key must
+                              be defined
+                            type: boolean
+                        required:
+                        - key
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      subscriber:
+                        description: Subscriber configures Push & Pull subscriber
+                          replicas.
+                        properties:
+                          replicas:
+                            description: Replicas is the desired number of replicas.
+                            format: int32
+                            minimum: 1
+                            type: integer
+                        required:
+                        - replicas
+                        type: object
+                    required:
+                    - enabled
+                    - image
+                    - publisher
+                    - secretRef
+                    - subscriber
+                    type: object
+                  web:
+                    description: Web configures the Nginx and PHP-FPM web workload.
+                    properties:
+                      autoscaling:
+                        description: |-
+                          Autoscaling optionally configures a HorizontalPodAutoscaler for the web workload.
+                          When omitted, the web workload uses the fixed replica count.
+                        properties:
+                          enabled:
+                            description: Enabled controls creation of the HorizontalPodAutoscaler.
+                            type: boolean
+                          maxReplicas:
+                            description: MaxReplicas is the upper autoscaling boundary.
+                            format: int32
+                            minimum: 0
+                            type: integer
+                          minReplicas:
+                            description: MinReplicas is the lower autoscaling boundary.
+                            format: int32
+                            minimum: 0
+                            type: integer
+                          targetCPUUtilization:
+                            description: TargetCPUUtilization is the average CPU utilization
+                              target in percent.
+                            format: int32
+                            maximum: 100
+                            minimum: 1
+                            type: integer
+                          targetMemoryUtilization:
+                            description: TargetMemoryUtilization is the average memory
+                              utilization target in percent.
+                            format: int32
+                            maximum: 100
+                            minimum: 1
+                            type: integer
+                        required:
+                        - enabled
+                        type: object
+                        x-kubernetes-validations:
+                        - message: minReplicas must be at least 1 when autoscaling
+                            is enabled
+                          rule: '!self.enabled || self.minReplicas >= 1'
+                        - message: maxReplicas must be greater than or equal to minReplicas
+                          rule: '!self.enabled || self.maxReplicas >= self.minReplicas'
+                      nginx:
+                        description: Nginx configures the Nginx container.
+                        properties:
+                          image:
+                            description: Image is a complete OCI image reference.
+                            minLength: 1
+                            type: string
+                          resources:
+                            description: Resources specifies compute resources for
+                              the container.
+                            properties:
+                              claims:
+                                description: |-
+                                  Claims lists the names of resources, defined in spec.resourceClaims,
+                                  that are used by this container.
+
+                                  This field depends on the
+                                  DynamicResourceAllocation feature gate.
+
+                                  This field is immutable. It can only be set for containers.
+                                items:
+                                  description: ResourceClaim references one entry
+                                    in PodSpec.ResourceClaims.
+                                  properties:
+                                    name:
+                                      description: |-
+                                        Name must match the name of one entry in pod.spec.resourceClaims of
+                                        the Pod where this field is used. It makes that resource available
+                                        inside a container.
+                                      type: string
+                                    request:
+                                      description: |-
+                                        Request is the name chosen for a request in the referenced claim.
+                                        If empty, everything from the claim is made available, otherwise
+                                        only the result of this request.
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                                x-kubernetes-list-map-keys:
+                                - name
+                                x-kubernetes-list-type: map
+                              limits:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Limits describes the maximum amount of compute resources allowed.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                              requests:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Requests describes the minimum amount of compute resources required.
+                                  If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                  otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                            type: object
+                        required:
+                        - image
+                        type: object
+                      php:
+                        description: PHP configures the PHP-FPM container.
+                        properties:
+                          image:
+                            description: Image is a complete OCI image reference.
+                            minLength: 1
+                            type: string
+                          resources:
+                            description: Resources specifies compute resources for
+                              the PHP-FPM container.
+                            properties:
+                              claims:
+                                description: |-
+                                  Claims lists the names of resources, defined in spec.resourceClaims,
+                                  that are used by this container.
+
+                                  This field depends on the
+                                  DynamicResourceAllocation feature gate.
+
+                                  This field is immutable. It can only be set for containers.
+                                items:
+                                  description: ResourceClaim references one entry
+                                    in PodSpec.ResourceClaims.
+                                  properties:
+                                    name:
+                                      description: |-
+                                        Name must match the name of one entry in pod.spec.resourceClaims of
+                                        the Pod where this field is used. It makes that resource available
+                                        inside a container.
+                                      type: string
+                                    request:
+                                      description: |-
+                                        Request is the name chosen for a request in the referenced claim.
+                                        If empty, everything from the claim is made available, otherwise
+                                        only the result of this request.
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                                type: array
+                                x-kubernetes-list-map-keys:
+                                - name
+                                x-kubernetes-list-type: map
+                              limits:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Limits describes the maximum amount of compute resources allowed.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                              requests:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                description: |-
+                                  Requests describes the minimum amount of compute resources required.
+                                  If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                  otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                  More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                type: object
+                            type: object
+                        required:
+                        - image
+                        type: object
+                      replicas:
+                        default: 1
+                        description: |-
+                          Replicas is the desired number of web Pods when autoscaling is disabled.
+                          It is also used as the initial replica count when autoscaling is enabled.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    required:
+                    - nginx
+                    - php
+                    type: object
+                required:
+                - cron
+                - web
+                type: object
+              sites:
+                description: |-
+                  Sites maps existing Bitrix site IDs to externally published hosts.
+                  Site existence is validated by the controller against the Bitrix installation.
+                items:
+                  description: BitrixSiteSpec publishes an existing Bitrix site through
+                    one or more hosts.
+                  properties:
+                    hosts:
+                      description: Hosts contains DNS names routed to this Bitrix
+                        site.
+                      items:
+                        minLength: 1
+                        type: string
+                      minItems: 1
+                      type: array
+                      x-kubernetes-list-type: set
+                    id:
+                      description: ID is the real Bitrix site ID, for example s1 or
+                        s2.
+                      maxLength: 32
+                      minLength: 1
+                      pattern: ^[A-Za-z0-9_-]+$
+                      type: string
+                    tls:
+                      description: |-
+                        TLS optionally configures the certificate used for HTTPS publication.
+                        It may be omitted for HTTP publication. If the selected Gateway listener
+                        uses HTTPS, the controller must require TLS to be configured for the site.
+                      properties:
+                        secretName:
+                          description: SecretName is the name of a TLS Secret in the
+                            BitrixCluster namespace.
+                          minLength: 1
+                          type: string
+                      required:
+                      - secretName
+                      type: object
+                  required:
+                  - hosts
+                  - id
+                  type: object
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - id
+                x-kubernetes-list-type: map
+              storage:
+                description: Storage configures persistent uploads and temporary runtime
+                  storage.
+                properties:
+                  temporary:
+                    description: Temporary configures non-persistent runtime files.
+                    properties:
+                      mountPath:
+                        description: MountPath is the temporary directory inside application
+                          containers.
+                        pattern: ^/([^/]+(/[^/]+)*)?$
+                        type: string
+                      sizeLimit:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        description: SizeLimit limits the EmptyDir volume capacity.
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      type:
+                        description: Type identifies the storage implementation.
+                        enum:
+                        - PersistentVolumeClaim
+                        - EmptyDir
+                        type: string
+                    required:
+                    - mountPath
+                    - sizeLimit
+                    - type
+                    type: object
+                    x-kubernetes-validations:
+                    - message: temporary storage type must be EmptyDir
+                      rule: self.type == 'EmptyDir'
+                  uploads:
+                    description: Uploads configures persistent user-uploaded files.
+                    properties:
+                      mountPath:
+                        description: MountPath is the uploads directory inside application
+                          containers.
+                        pattern: ^/([^/]+(/[^/]+)*)?$
+                        type: string
+                      persistentVolumeClaim:
+                        description: PersistentVolumeClaim configures the PVC created
+                          for uploads.
+                        properties:
+                          accessModes:
+                            description: AccessModes contains the requested PersistentVolume
+                              access modes.
+                            items:
+                              enum:
+                              - ReadWriteOnce
+                              - ReadOnlyMany
+                              - ReadWriteMany
+                              - ReadWriteOncePod
+                              type: string
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: set
+                          size:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            description: Size is the requested storage capacity.
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          storageClassName:
+                            description: StorageClassName is the Kubernetes StorageClass
+                              used by the PVC.
+                            minLength: 1
+                            type: string
+                        required:
+                        - accessModes
+                        - size
+                        - storageClassName
+                        type: object
+                      type:
+                        description: Type identifies the storage implementation.
+                        enum:
+                        - PersistentVolumeClaim
+                        - EmptyDir
+                        type: string
+                    required:
+                    - mountPath
+                    - persistentVolumeClaim
+                    - type
+                    type: object
+                    x-kubernetes-validations:
+                    - message: uploads storage type must be PersistentVolumeClaim
+                      rule: self.type == 'PersistentVolumeClaim'
+                required:
+                - temporary
+                - uploads
+                type: object
+            required:
+            - crypto
+            - database
+            - license
+            - redis
+            - release
+            - runtime
+            - sites
+            - storage
+            type: object
+          status:
+            description: Status defines the observed state of BitrixCluster.
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the resource state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: ObservedGeneration is the most recent metadata.generation
+                  reconciled by the controller.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is a concise summary for human-readable output.
+                enum:
+                - Pending
+                - Progressing
+                - Ready
+                - Degraded
+                type: string
+              release:
+                description: Release describes the image currently observed by the
+                  controller.
+                properties:
+                  digest:
+                    description: Digest is the resolved or configured image digest.
+                    type: string
+                  repository:
+                    description: Repository is the observed image repository.
+                    type: string
+                  tag:
+                    description: Tag is the observed image tag.
+                    type: string
+                type: object
+              runtime:
+                description: Runtime contains rollout status for generated workloads.
+                properties:
+                  cron:
+                    description: Cron is the observed cron workload status.
+                    properties:
+                      availableReplicas:
+                        description: AvailableReplicas is the number of available
+                          replicas.
+                        format: int32
+                        type: integer
+                      desiredReplicas:
+                        description: DesiredReplicas is the desired number of replicas.
+                        format: int32
+                        type: integer
+                      readyReplicas:
+                        description: ReadyReplicas is the number of ready replicas.
+                        format: int32
+                        type: integer
+                      updatedReplicas:
+                        description: UpdatedReplicas is the number of replicas running
+                          the desired release.
+                        format: int32
+                        type: integer
+                    type: object
+                  pushPublisher:
+                    description: PushPublisher is the observed Push & Pull publisher
+                      status.
+                    properties:
+                      availableReplicas:
+                        description: AvailableReplicas is the number of available
+                          replicas.
+                        format: int32
+                        type: integer
+                      desiredReplicas:
+                        description: DesiredReplicas is the desired number of replicas.
+                        format: int32
+                        type: integer
+                      readyReplicas:
+                        description: ReadyReplicas is the number of ready replicas.
+                        format: int32
+                        type: integer
+                      updatedReplicas:
+                        description: UpdatedReplicas is the number of replicas running
+                          the desired release.
+                        format: int32
+                        type: integer
+                    type: object
+                  pushSubscriber:
+                    description: PushSubscriber is the observed Push & Pull subscriber
+                      status.
+                    properties:
+                      availableReplicas:
+                        description: AvailableReplicas is the number of available
+                          replicas.
+                        format: int32
+                        type: integer
+                      desiredReplicas:
+                        description: DesiredReplicas is the desired number of replicas.
+                        format: int32
+                        type: integer
+                      readyReplicas:
+                        description: ReadyReplicas is the number of ready replicas.
+                        format: int32
+                        type: integer
+                      updatedReplicas:
+                        description: UpdatedReplicas is the number of replicas running
+                          the desired release.
+                        format: int32
+                        type: integer
+                    type: object
+                  web:
+                    description: Web is the observed web workload status.
+                    properties:
+                      availableReplicas:
+                        description: AvailableReplicas is the number of available
+                          replicas.
+                        format: int32
+                        type: integer
+                      desiredReplicas:
+                        description: DesiredReplicas is the desired number of replicas.
+                        format: int32
+                        type: integer
+                      readyReplicas:
+                        description: ReadyReplicas is the number of ready replicas.
+                        format: int32
+                        type: integer
+                      updatedReplicas:
+                        description: UpdatedReplicas is the number of replicas running
+                          the desired release.
+                        format: int32
+                        type: integer
+                    type: object
+                type: object
+              sites:
+                description: Sites contains validation and endpoint status for configured
+                  Bitrix sites.
+                items:
+                  description: BitrixSiteStatus contains the observed state of one
+                    configured Bitrix site.
+                  properties:
+                    exists:
+                      description: Exists reports whether the site was found in the
+                        Bitrix installation.
+                      type: boolean
+                    id:
+                      description: ID is the Bitrix site ID from spec.sites.
+                      type: string
+                    message:
+                      description: Message contains a human-readable site validation
+                        result.
+                      type: string
+                    urls:
+                      description: URLs contains externally published site URLs.
+                      items:
+                        type: string
+                      type: array
+                      x-kubernetes-list-type: set
+                  required:
+                  - id
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - id
+                x-kubernetes-list-type: map
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base
+patches:
+  - target:
+      kind: BitrixCluster
+    patch: |-
+      apiVersion: bitrix.m8.team/v1alpha1
+      kind: BitrixCluster
+      metadata:
+        name: example
+      spec:
+        sites:
+          - id: s1
+            hosts: [portal.example.com]
+            tls:
+              secretName: portal-tls
+        networking:
+          gateway:
+            enabled: true
+            parentRef:
+              name: shared
+              namespace: edge
+              sectionName: https

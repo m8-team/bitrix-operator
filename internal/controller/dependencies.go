@@ -110,6 +110,7 @@ func pvcRequest(_ context.Context, obj client.Object) []ctrl.Request {
 // SetupWithManager uses metadata-only Secret watches, keeping credential data out of the shared cache.
 func (r *BitrixClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.APIReader = mgr.GetAPIReader()
+	r.Recorder = mgr.GetEventRecorder("bitrix.m8.team/bitrixcluster-controller")
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &bx.BitrixCluster{}, secretIndex, watchedSecrets); err != nil {
 		return err
 	}

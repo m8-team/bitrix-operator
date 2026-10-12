@@ -1,0 +1,39 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 5
+    allow:
+      - dependency-type: all
+    groups:
+      kubernetes:
+        patterns: ["k8s.io/*", "sigs.k8s.io/controller-runtime"]
+      opentelemetry:
+        patterns: ["go.opentelemetry.io/*"]
+    commit-message:
+      prefix: "chore(deps)"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci(deps)"
+  - package-ecosystem: docker
+    directories: ["/", "/test/fixtures/runtime", "/test/fixtures/network"]
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"

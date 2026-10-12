@@ -1,0 +1,28 @@
+name: Observability
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: observability-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  rules:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Verify alert behavior with promtool
+        run: bash hack/test-observability.sh
+      - name: Render the secure monitoring profile and check dashboard JSON
+        run: |
+          make kustomize
+          bin/kustomize build config/observability > /tmp/observability.yaml
+          python3 -m json.tool config/observability/dashboard.json > /dev/null

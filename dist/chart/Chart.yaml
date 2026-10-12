@@ -1,0 +1,15 @@
+apiVersion: v2
+name: bitrix-operator
+description: BitrixCluster controller; external database, Redis and application images are managed separately
+type: application
+
+version: 0.1.0-dev
+appVersion: "dev"
+kubeVersion: ">=1.36.0-0 <1.38.0-0"
+
+keywords:
+  - kubernetes
+  - operator
+
+annotations:
+  kubebuilder.io/generated-by: kubebuilder

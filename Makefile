@@ -60,7 +60,7 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet setup-envtest ## Run tests.
+test: manifests generate fmt vet setup-envtest kustomize ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
@@ -134,28 +134,23 @@ docker-build: ## Build docker image with the manager.
 docker-push: ## Push docker image with the manager.
 	$(CONTAINER_TOOL) push ${IMG}
 
-# PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
-# architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
-# - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
-# - have enabled BuildKit. More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-# - be able to push the image to your registry (i.e. if you do not set a valid value via IMG=<myregistry/image:<tag>> then the export will fail)
-# To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
-PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
+# Uses the active Buildx builder; failures propagate and no builder is created/deleted.
+PLATFORMS ?= linux/amd64,linux/arm64
 .PHONY: docker-buildx
-docker-buildx: ## Build and push docker image for the manager for cross-platform support
-	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- $(CONTAINER_TOOL) buildx create --name bitrix-operator-builder
-	$(CONTAINER_TOOL) buildx use bitrix-operator-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) $(if $(BASE_IMAGE),--build-arg BASE_IMAGE=$(BASE_IMAGE)) --tag ${IMG} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm bitrix-operator-builder
-	rm Dockerfile.cross
+docker-buildx: ## Build and push manager for the supported architectures.
+	$(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) $(if $(BASE_IMAGE),--build-arg BASE_IMAGE=$(BASE_IMAGE)) --tag ${IMG} .
+
+.PHONY: test-release
+test-release: ## Validate release policy without registry access.
+	python3 -m unittest discover -s test/release -v
+
+.PHONY: test-examples
+test-examples: kustomize ## Render all complete BitrixCluster installation examples.
+	KUSTOMIZE="$(KUSTOMIZE)" bash hack/test-install-examples.sh
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
-	mkdir -p dist
-	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
-	"$(KUSTOMIZE)" build config/default > dist/install.yaml
+	IMG="$(IMG)" KUSTOMIZE="$(KUSTOMIZE)" bash hack/build-installer.sh
 
 ##@ Deployment
 
@@ -268,3 +263,51 @@ verify-generated: manifests generate kustomize ## Fail if generated files differ
 	"$(KUSTOMIZE)" build config/crd >/dev/null
 	"$(KUSTOMIZE)" build config/default >/dev/null
 	"$(KUSTOMIZE)" build config/samples >/dev/null
+
+##@ Helm Deployment
+
+## Helm binary to use for deploying the chart
+HELM ?= $(LOCALBIN)/helm
+## Namespace to deploy the Helm release
+HELM_NAMESPACE ?= bitrix-operator-system
+## Name of the Helm release
+HELM_RELEASE ?= bitrix-operator
+## Path to the Helm chart directory
+HELM_CHART_DIR ?= dist/chart
+## Additional arguments to pass to helm commands
+HELM_EXTRA_ARGS ?=
+
+.PHONY: install-helm
+install-helm: ## Install the pinned Helm CLI with checksum verification.
+	bash hack/install-helm.sh
+
+.PHONY: helm-deploy
+helm-deploy: ## Deploy manager to the selected cluster; IMG accepts tag or digest references.
+	$(HELM) upgrade --install $(HELM_RELEASE) $(HELM_CHART_DIR) \
+		--namespace $(HELM_NAMESPACE) --create-namespace \
+		--set-string manager.image.reference="$(IMG)" --wait --timeout 5m $(HELM_EXTRA_ARGS)
+
+.PHONY: sync-chart
+sync-chart: manifests generate ## Copy authoritative CRD/RBAC into the chart.
+	bash hack/sync-chart.sh
+
+.PHONY: test-chart
+test-chart: sync-chart ## Lint, render and test the chart using the pinned local Helm CLI.
+	bin/helm lint --strict dist/chart --kube-version 1.37.0 --set-string manager.image.reference=controller:test
+	BITRIX_CHART_TESTS=1 go test ./internal/packaging -count=1
+
+.PHONY: helm-uninstall
+helm-uninstall: ## Uninstall the Helm release from the K8s cluster.
+	$(HELM) uninstall $(HELM_RELEASE) --namespace $(HELM_NAMESPACE)
+
+.PHONY: helm-status
+helm-status: ## Show Helm release status.
+	$(HELM) status $(HELM_RELEASE) --namespace $(HELM_NAMESPACE)
+
+.PHONY: helm-history
+helm-history: ## Show Helm release history.
+	$(HELM) history $(HELM_RELEASE) --namespace $(HELM_NAMESPACE)
+
+.PHONY: helm-rollback
+helm-rollback: ## Rollback to previous Helm release.
+	$(HELM) rollback $(HELM_RELEASE) --namespace $(HELM_NAMESPACE)

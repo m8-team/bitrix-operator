@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -41,8 +42,10 @@ type BitrixClusterReconciler struct {
 	Scheme              *runtime.Scheme
 	APIReader           client.Reader
 	GatewayAPIAvailable bool
+	Recorder            events.EventRecorder
 }
 
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;patch;delete
@@ -152,6 +155,7 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if patchErr := r.Status().Patch(ctx, c, client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{})); patchErr != nil {
 			return ctrl.Result{}, patchErr
 		}
+		r.recordTransition(before, c)
 	}
 	return result, errors.Join(err, gatewayErr)
 }
