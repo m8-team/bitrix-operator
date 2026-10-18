@@ -108,7 +108,11 @@ func resolveReconcileResult(c *bx.BitrixCluster, resourceErr, gatewayErr error) 
 		retry = runtimeIssue.retryAfter
 	}
 	if gatewayErr != nil {
-		retry = shorterRequeue(retry, publicationIssue.retryAfter)
+		if resourceErr == nil {
+			retry = publicationIssue.retryAfter
+		} else {
+			retry = shorterRequeue(retry, publicationIssue.retryAfter)
+		}
 	}
 	return ctrl.Result{RequeueAfter: retry}, nil
 }
