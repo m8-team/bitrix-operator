@@ -48,9 +48,6 @@ func (r *BitrixClusterReconciler) observeRuntimeWeb(ctx context.Context, c *bx.B
 	if err := r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "web")}, deployment); err != nil {
 		return err
 	}
-	if err := r.reconcileHPA(ctx, c); err != nil {
-		return err
-	}
 	desired := webDesiredReplicas(c, deployment)
 	rollout := observeDeployment(deployment, desired)
 	c.Status.Runtime.Web = rollout.status
@@ -58,10 +55,15 @@ func (r *BitrixClusterReconciler) observeRuntimeWeb(ctx context.Context, c *bx.B
 		condition(c, "WebReady", metav1.ConditionTrue, "RolloutComplete", "The desired web replicas are ready and uploads storage is bound")
 		c.Status.Release = &bx.ReleaseStatus{Repository: c.Spec.Release.Image.Repository, Tag: c.Spec.Release.Image.Tag, Digest: c.Spec.Release.Image.Digest}
 	}
+	in.webReady = rollout.ready
+	// Deployment readiness is an independent observation. Even when the HPA
+	// API fails, the status aggregator must retain this WebReady result.
+	if err := r.reconcileHPA(ctx, c); err != nil {
+		return err
+	}
 	if rollout.deadlineExceeded {
 		return block(progressDeadlineExceeded, "The web Deployment exceeded its rollout deadline")
 	}
-	in.webReady = rollout.ready
 	return nil
 }
 
