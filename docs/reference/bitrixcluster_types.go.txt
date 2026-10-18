@@ -158,7 +158,7 @@ type BitrixSiteSpec struct {
 	// +kubebuilder:validation:MaxItems=16
 	// +kubebuilder:validation:items:MinLength=1
 	// +kubebuilder:validation:items:MaxLength=253
-	// +kubebuilder:validation:items:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
+	// +kubebuilder:validation:items:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
 	// +kubebuilder:validation:XValidation:rule="self.all(h, !h.matches('^[0-9]+([.][0-9]+){3}$'))",message="literal IPv4 addresses are not allowed as site hosts"
 	// +listType=set
 	// +required
