@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func TestStatusInitializationWithoutKubernetes(t *testing.T) {
@@ -129,5 +130,39 @@ func TestConflictIsWaitingNotTransient(t *testing.T) {
 	}
 	if web := meta.FindStatusCondition(c.Status.Conditions, "WebReady"); web.Reason != "ApplyConflict" {
 		t.Fatalf("missing component-specific conflict: %+v", web)
+	}
+}
+
+func TestHealthyRequeueIsBoundedAndDeterministicallyStaggered(t *testing.T) {
+	makeReady := func(uid string) *bx.BitrixCluster {
+		c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 2, UID: types.UID(uid)}}
+		initializeReconcileStatus(c)
+		for _, kind := range []string{"StorageReady", conditionWebReady, "CronReady", "PushReady", conditionSitesValidated, "GatewayReady", "AutoscalingReady"} {
+			condition(c, kind, metav1.ConditionTrue, "Verified", "verified")
+		}
+		return c
+	}
+	first := makeReady("cluster-one")
+	result, err := resolveReconcileResult(first, nil, nil)
+	if err != nil || first.Status.Phase != bx.BitrixClusterPhaseReady {
+		t.Fatalf("fully observed cluster must be ready: %+v, %v", first.Status, err)
+	}
+	if result.RequeueAfter < healthyRequeueAfter || result.RequeueAfter >= healthyRequeueAfter+healthyRequeueJitterSeconds*time.Second {
+		t.Fatalf("healthy interval not bounded: %s", result.RequeueAfter)
+	}
+	if second := healthyRequeueInterval(makeReady("cluster-one")); result.RequeueAfter != second {
+		t.Fatalf("healthy interval must be stable per UID: %s != %s", result.RequeueAfter, second)
+	}
+	if another := healthyRequeueInterval(makeReady("cluster-two")); another == result.RequeueAfter {
+		t.Fatalf("different cluster UIDs unexpectedly share the same resync delay: %s", another)
+	}
+}
+
+func TestPendingRequeueRemainsFast(t *testing.T) {
+	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 9, UID: types.UID("pending")}}
+	initializeReconcileStatus(c)
+	result, err := resolveReconcileResult(c, nil, nil)
+	if err != nil || result.RequeueAfter != pendingRequeueAfter {
+		t.Fatalf("pending components must retain fast safety checks: %+v, %v", result, err)
 	}
 }

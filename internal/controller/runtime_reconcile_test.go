@@ -123,3 +123,33 @@ func TestComponentStepDoesNotMutateSharedStatus(t *testing.T) {
 		t.Fatal("missing web readiness after aggregation")
 	}
 }
+
+func TestComponentAppliedStateIsDistinctFromObservedReadiness(t *testing.T) {
+	c := &bx.BitrixCluster{}
+	initializeReconcileStatus(c)
+	step := componentStep{name: stageWeb, run: func(_ context.Context, snapshot *bx.BitrixCluster, _ *runtimeInputs) error {
+		// Applying a Deployment does not mean the Deployment controller has
+		// observed the generation or made the workload ready.
+		return nil
+	}}
+	result, err := step.Reconcile(context.Background(), c, &runtimeInputs{})
+	if err != nil || !result.Applied {
+		t.Fatalf("successful apply must be recorded independently: %+v, %v", result, err)
+	}
+	if meta.IsStatusConditionTrue(c.Status.Conditions, conditionWebReady) {
+		t.Fatal("an applied spec is not an observed ready Deployment")
+	}
+	failure := errors.New("Kubernetes API temporarily unavailable")
+	failedStep := componentStep{name: "config-gc", run: func(_ context.Context, snapshot *bx.BitrixCluster, _ *runtimeInputs) error {
+		condition(snapshot, "StorageReady", metav1.ConditionTrue, "VolumeBound", "bound")
+		return failure
+	}}
+	result, err = failedStep.Reconcile(context.Background(), c, &runtimeInputs{})
+	if !errors.Is(err, failure) || result.Applied {
+		t.Fatalf("partial apply must not be marked complete: %+v, %v", result, err)
+	}
+	applyComponentResult(c, result)
+	if !meta.IsStatusConditionTrue(c.Status.Conditions, "StorageReady") {
+		t.Fatal("an observation made before a failure was lost")
+	}
+}

@@ -94,6 +94,50 @@ var _ = Describe("Web and storage reconciliation", func() {
 		Expect(uploads(c).UID).To(Equal(p.UID))
 	})
 
+	It("recovers after a partial apply blocked by a foreign Service", func() {
+		c := webSample()
+		serviceKey := client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "web")}
+		foreign := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: serviceKey.Name, Namespace: serviceKey.Namespace},
+			Spec:       corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 8080}}},
+		}
+		Expect(k8sClient.Create(ctx, foreign)).To(Succeed())
+		reconcileWeb(c)
+		Expect(meta.FindStatusCondition(c.Status.Conditions, "Ready").Reason).To(Equal("ResourceCollision"))
+
+		// A failed web stage must not invalidate earlier successful storage
+		// and ConfigMap stages. Reconciliation has no stored transaction state.
+		pvcUID := uploads(c).UID
+		configs := &corev1.ConfigMapList{}
+		label := client.MatchingLabels{workload.OwnerUID: string(c.UID)}
+		Expect(k8sClient.List(ctx, configs, client.InNamespace(c.Namespace), label)).To(Succeed())
+		Expect(configs.Items).NotTo(BeEmpty())
+		configUIDs := map[string]string{}
+		for _, item := range configs.Items {
+			configUIDs[item.Name] = string(item.UID)
+		}
+		Expect(k8sClient.Get(ctx, serviceKey, foreign)).To(Succeed())
+		Expect(foreign.OwnerReferences).To(BeEmpty())
+		Expect(k8sClient.Delete(ctx, foreign)).To(Succeed())
+
+		// Simulate a later workqueue run, including a fresh CR read, after the
+		// owner of the conflicting name releases it.
+		reconcileWeb(c)
+		deployment := webDeployment(c)
+		Expect(deployment.OwnerReferences[0].UID).To(Equal(c.UID))
+		Expect(uploads(c).UID).To(Equal(pvcUID))
+		again := &corev1.ConfigMapList{}
+		Expect(k8sClient.List(ctx, again, client.InNamespace(c.Namespace), label)).To(Succeed())
+		Expect(again.Items).To(HaveLen(len(configUIDs)))
+		for _, item := range again.Items {
+			Expect(string(item.UID)).To(Equal(configUIDs[item.Name]))
+		}
+		Expect(meta.IsStatusConditionFalse(c.Status.Conditions, "WebReady")).To(BeTrue())
+		version := c.ResourceVersion
+		reconcileWeb(c)
+		Expect(c.ResourceVersion).To(Equal(version))
+	})
+
 	It("repairs managed field drift while preserving unrelated metadata", func() {
 		c := reconcileWeb(webSample())
 		d := webDeployment(c)

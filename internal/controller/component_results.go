@@ -14,6 +14,10 @@ import (
 // stage. Component implementations work on an isolated snapshot; only the
 // orchestration/status layer can apply their observations to the shared CR.
 type ComponentResult struct {
+	// Applied is true when the stage completed applying or checking its desired
+	// objects without error. It is NOT evidence of workload readiness: observed
+	// health is carried exclusively in Conditions and workload status.
+	Applied    bool
 	Name       string
 	Conditions []metav1.Condition
 	Runtime    *bx.RuntimeStatus
@@ -31,7 +35,7 @@ type ComponentResult struct {
 func captureComponentResult(name string, cluster *bx.BitrixCluster, reconcile func(*bx.BitrixCluster) error) (ComponentResult, error) {
 	snapshot := cluster.DeepCopy()
 	err := reconcile(snapshot)
-	result := ComponentResult{Name: name}
+	result := ComponentResult{Name: name, Applied: err == nil}
 	for _, after := range snapshot.Status.Conditions {
 		before := meta.FindStatusCondition(cluster.Status.Conditions, after.Type)
 		if before == nil || !reflect.DeepEqual(*before, after) {
