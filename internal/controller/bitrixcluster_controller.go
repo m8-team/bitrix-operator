@@ -42,6 +42,7 @@ type BitrixClusterReconciler struct {
 	Scheme              *runtime.Scheme
 	APIReader           client.Reader
 	GatewayAPIAvailable bool
+	GatewayParentIndexed bool
 	Recorder            events.EventRecorder
 }
 

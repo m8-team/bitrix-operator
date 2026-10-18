@@ -26,6 +26,8 @@ import (
 
 const secretIndex = "bitrix.dependencies.secrets"
 const storageClassIndex = "bitrix.dependencies.storageClass"
+const gatewayParentIndex = "bitrix.dependencies.gatewayParent"
+const routeParentIndex = "bitrix.dependencies.routeParent"
 
 func secretNames(obj client.Object) []string {
 	c := obj.(*bx.BitrixCluster)
@@ -119,11 +121,20 @@ func (r *BitrixClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}); err != nil {
 		return err
 	}
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &bx.BitrixCluster{}, gatewayParentIndex, clusterGatewayParents); err != nil {
+		return err
+	}
 	available, err := gatewayAPIsAvailable(mgr.GetRESTMapper())
 	if err != nil {
 		return err
 	}
 	r.GatewayAPIAvailable = available
+	if available {
+		if err := mgr.GetFieldIndexer().IndexField(context.Background(), &gateway.HTTPRoute{}, routeParentIndex, routeGatewayParents); err != nil {
+			return err
+		}
+	}
+	r.GatewayParentIndexed = true
 	b := ctrl.NewControllerManagedBy(mgr).For(&bx.BitrixCluster{}).
 		Owns(&policyv1.PodDisruptionBudget{}).
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).Owns(&batchv1.Job{}).Owns(deploymentObject()).Owns(&corev1.Service{}).Owns(&corev1.ConfigMap{}).Owns(&networkingv1.NetworkPolicy{}).
