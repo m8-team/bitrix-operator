@@ -5,7 +5,9 @@ import (
 	"slices"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -26,6 +28,11 @@ func gatewayAPIsAvailable(mapper meta.RESTMapper) (bool, error) {
 }
 
 // Keyed dependency indexes keep Gateway events local to their consumers.
+func gatewayClassNames(obj client.Object) []string {
+	g := obj.(*gateway.Gateway)
+	return []string{string(g.Spec.GatewayClassName)}
+}
+
 func gatewayParentKey(namespace, name string) string {
 	return namespace + "/" + name
 }
@@ -72,8 +79,33 @@ func watchedSecrets(obj client.Object) []string {
 	return slices.Compact(names)
 }
 
+// gatewayRequestsForParents gathers only consumers of the changed Gateway
+// parents. A cluster may consume several routes or gateways, so requests are
+// deduplicated before entering the work queue.
+func (r *BitrixClusterReconciler) gatewayRequestsForParents(ctx context.Context, parents []string) []ctrl.Request {
+	seen := sets.New[client.ObjectKey]()
+	requests := make([]ctrl.Request, 0)
+	for _, key := range parents {
+		clusters := &bx.BitrixClusterList{}
+		if err := r.List(ctx, clusters, client.MatchingFields{gatewayParentIndex: key}); err != nil {
+			ctrl.LoggerFrom(ctx).Error(err, "Could not list Gateway consumers by indexed parent")
+			return nil
+		}
+		for i := range clusters.Items {
+			id := client.ObjectKeyFromObject(&clusters.Items[i])
+			if seen.Has(id) {
+				continue
+			}
+			seen.Insert(id)
+			requests = append(requests, ctrl.Request{NamespacedName: id})
+		}
+	}
+	return requests
+}
+
 // Gateway objects and external HTTPRoutes can change acceptance or host reservations.
-// Events only enqueue; reconciliation rechecks ownership and current dependencies.
+// Namespace changes matter for AllowedRoutes namespace selectors. These watches
+// must never enqueue unrelated BitrixClusters when an index is available.
 func (r *BitrixClusterReconciler) gatewayRequests(ctx context.Context, obj client.Object) []ctrl.Request {
 	options := []client.ListOption{}
 	if r.GatewayParentIndexed {
@@ -83,24 +115,19 @@ func (r *BitrixClusterReconciler) gatewayRequests(ctx context.Context, obj clien
 		case *gateway.ReferenceGrant:
 			options = append(options, client.InNamespace(source.Namespace))
 		case *gateway.HTTPRoute:
-			keys := routeGatewayParents(source)
-			requests := []ctrl.Request{}
-			seen := sets.New[client.ObjectKey]()
-			for _, key := range keys {
-				clusters := &bx.BitrixClusterList{}
-				if err := r.List(ctx, clusters, client.MatchingFields{gatewayParentIndex: key}); err != nil {
-					ctrl.LoggerFrom(ctx).Error(err, "Could not list HTTPRoute consumers")
-					return nil
-				}
-				for i := range clusters.Items {
-					id := client.ObjectKeyFromObject(&clusters.Items[i])
-					if !seen.Has(id) {
-						seen.Insert(id)
-						requests = append(requests, ctrl.Request{NamespacedName: id})
-					}
-				}
+			return r.gatewayRequestsForParents(ctx, routeGatewayParents(source))
+		case *gateway.GatewayClass:
+			gateways := &gateway.GatewayList{}
+			if err := r.List(ctx, gateways, client.MatchingFields{gatewayClassIndex: source.Name}); err != nil {
+				ctrl.LoggerFrom(ctx).Error(err, "Could not list Gateways by indexed GatewayClass")
+				return nil
 			}
-			return requests
+			keys := sets.New[string]()
+			for i := range gateways.Items {
+				gw := &gateways.Items[i]
+				keys.Insert(gatewayParentKey(gw.Namespace, gw.Name))
+			}
+			return r.gatewayRequestsForParents(ctx, sets.List(keys))
 		case *bx.BitrixCluster:
 			if source.Spec.Networking == nil || source.Spec.Networking.Gateway == nil || source.Spec.Networking.Gateway.ParentRef == nil {
 				return nil
@@ -108,6 +135,13 @@ func (r *BitrixClusterReconciler) gatewayRequests(ctx context.Context, obj clien
 			p := source.Spec.Networking.Gateway.ParentRef
 			options = append(options, client.MatchingFields{gatewayParentIndex: gatewayParentKey(p.Namespace, p.Name)})
 		}
+	}
+	// WatchesMetadata(Namespaces) provides PartialObjectMetadata. Both that
+	// type and the normal typed Namespace object should scope work to tenants
+	// actually affected by namespace label or lifecycle changes.
+	switch obj.(type) {
+	case *corev1.Namespace, *metav1.PartialObjectMetadata:
+		options = append(options, client.InNamespace(obj.GetName()))
 	}
 	clusters := &bx.BitrixClusterList{}
 	if err := r.List(ctx, clusters, options...); err != nil {

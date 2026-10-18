@@ -28,6 +28,7 @@ const secretIndex = "bitrix.dependencies.secrets"
 const storageClassIndex = "bitrix.dependencies.storageClass"
 const gatewayParentIndex = "bitrix.dependencies.gatewayParent"
 const routeParentIndex = "bitrix.dependencies.routeParent"
+const gatewayClassIndex = "bitrix.dependencies.gatewayClass"
 
 func secretNames(obj client.Object) []string {
 	c := obj.(*bx.BitrixCluster)
@@ -131,6 +132,9 @@ func (r *BitrixClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.GatewayAPIAvailable = available
 	if available {
 		if err := mgr.GetFieldIndexer().IndexField(context.Background(), &gateway.HTTPRoute{}, routeParentIndex, routeGatewayParents); err != nil {
+			return err
+		}
+		if err := mgr.GetFieldIndexer().IndexField(context.Background(), &gateway.Gateway{}, gatewayClassIndex, gatewayClassNames); err != nil {
 			return err
 		}
 	}
