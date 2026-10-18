@@ -55,3 +55,16 @@ func TestShorterRequeue(t *testing.T) {
 		t.Fatalf("longer requeue = %s", got)
 	}
 }
+
+func TestGatewayCleanupFailureIsNotSilenced(t *testing.T) {
+	cause := errors.New("delete HTTPRoute: connection refused")
+	failure := &gatewayCleanupError{reason: "CertificateExpired", message: "expired", cause: cause}
+	if !errors.Is(failure, cause) {
+		t.Fatal("cleanup error lost original cause")
+	}
+	classified := classifyReconcileError(failure, true)
+	if classified.disposition != dispositionTransient || classified.reason != "CertificateExpired" ||
+		!errors.Is(classified.cause, cause) || classified.retryAfter != 0 {
+		t.Fatalf("cleanup failure should keep the blocking reason and be rate-limited: %+v", classified)
+	}
+}

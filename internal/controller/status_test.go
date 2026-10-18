@@ -166,3 +166,73 @@ func TestPendingRequeueRemainsFast(t *testing.T) {
 		t.Fatalf("pending components must retain fast safety checks: %+v, %v", result, err)
 	}
 }
+
+func TestEarlyFailureKeepsObservedWorkloadsForSameGeneration(t *testing.T) {
+	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 7}}
+	c.Spec.Runtime.Web.Replicas = 3
+	c.Spec.Runtime.Cron.Enabled = true
+	c.Spec.Sites = []bx.BitrixSiteSpec{{ID: "s1", Hosts: []string{"example.test"}}}
+	initializeReconcileStatus(c)
+	c.Status.Runtime.Web.ReadyReplicas = 3
+	c.Status.Runtime.Cron.ReadyReplicas = 1
+	c.Status.Release = &bx.ReleaseStatus{Tag: "stable", Digest: "sha256:old"}
+	condition(c, conditionWebReady, metav1.ConditionTrue, "RolloutComplete", "web observed")
+	condition(c, conditionCronReady, metav1.ConditionTrue, "RolloutComplete", "cron observed")
+	condition(c, conditionSitesValidated, metav1.ConditionTrue, "Validated", "validated")
+	initializeReconcileStatus(c)
+	_, err := resolveReconcileResult(c, &componentError{name: "prepare", cause: block("SecretMissing", "license Secret missing")}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Status.Runtime.Web.ReadyReplicas != 3 || c.Status.Runtime.Cron.ReadyReplicas != 1 || c.Status.Release == nil ||
+		!meta.IsStatusConditionTrue(c.Status.Conditions, conditionWebReady) || !meta.IsStatusConditionTrue(c.Status.Conditions, conditionCronReady) {
+		t.Fatalf("early failure erased observations: %+v", c.Status)
+	}
+	if meta.IsStatusConditionTrue(c.Status.Conditions, "Ready") || c.Status.Phase != bx.BitrixClusterPhaseDegraded {
+		t.Fatalf("early blocked preparation must keep overall Ready false: %+v", c.Status)
+	}
+	c.Generation++
+	initializeReconcileStatus(c)
+	if c.Status.Runtime.Web.ReadyReplicas != 0 || c.Status.Release != nil {
+		t.Fatalf("new generation inherited old runtime observations: %+v", c.Status)
+	}
+	for _, kind := range []string{conditionWebReady, conditionCronReady, conditionSitesValidated} {
+		observed := meta.FindStatusCondition(c.Status.Conditions, kind)
+		if observed == nil || observed.Status != metav1.ConditionUnknown || observed.ObservedGeneration != c.Generation {
+			t.Fatalf("new generation must not claim verified %s: %+v", kind, observed)
+		}
+	}
+}
+
+func TestGatewayBlockedErrorDegradesAndWaitingRemainsProgressing(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		err     error
+		phase   bx.BitrixClusterPhase
+		requeue time.Duration
+	}{
+		{"invalid publication", block("InvalidGateway", "bad listener"), bx.BitrixClusterPhaseDegraded, time.Minute},
+		{"expected stopping", waitFor("CronStopping", "waiting for Pod deletion", 30*time.Second), bx.BitrixClusterPhaseProgressing, 30 * time.Second},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 2}}
+			initializeReconcileStatus(c)
+			var resultTime time.Duration
+			var err error
+			if tt.name == "invalid publication" {
+				result, e := resolveReconcileResult(c, nil, tt.err)
+				resultTime, err = result.RequeueAfter, e
+				gw := meta.FindStatusCondition(c.Status.Conditions, "GatewayReady")
+				if gw == nil || gw.Reason != "InvalidGateway" {
+					t.Fatalf("lost blocked Gateway reason: %+v", gw)
+				}
+			} else {
+				result, e := resolveReconcileResult(c, tt.err, nil)
+				resultTime, err = result.RequeueAfter, e
+			}
+			if err != nil || c.Status.Phase != tt.phase || resultTime != tt.requeue {
+				t.Fatalf("wrong disposition: phase=%s retry=%s err=%v", c.Status.Phase, resultTime, err)
+			}
+		})
+	}
+}

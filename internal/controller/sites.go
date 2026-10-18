@@ -140,7 +140,14 @@ func (r *BitrixClusterReconciler) deleteValidationJob(ctx context.Context, j *ba
 }
 
 func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision, image string) error {
+	// Site existence is identity-sensitive: a successful previous Job must not
+	// keep reporting Exists when the runtime is changing or validation is pending.
+	for i := range c.Status.Sites {
+		c.Status.Sites[i].Exists = false
+		c.Status.Sites[i].Message = "Site existence has not been confirmed for the current runtime"
+	}
 	if !meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") {
+		condition(c, conditionSitesValidated, metav1.ConditionUnknown, "RuntimeUnresolved", "Waiting for a ready web runtime before site validation")
 		return nil
 	}
 	release, php, err := r.observedRuntimeDigests(ctx, c, b, revision, image)
@@ -157,6 +164,10 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 		Digest:     release,
 	}
 	name := workload.SiteValidationName(c, b, revision, release, php)
+	// A previously validated identity is not proof for a new release, Secret,
+	// configuration bundle or image digest. The completed Job below can
+	// establish current validity again without exposing an intermediate flap.
+	condition(c, conditionSitesValidated, metav1.ConditionUnknown, "ValidationPending", "Waiting for the validation result of the current runtime")
 	jobs := &batchv1.JobList{}
 	if err = r.reader().List(ctx, jobs, client.InNamespace(c.Namespace), client.MatchingLabels{workload.OwnerUID: string(c.UID), "app.kubernetes.io/name": "bitrix-sites"}); err != nil {
 		return err

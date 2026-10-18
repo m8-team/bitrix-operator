@@ -60,7 +60,7 @@ func (r *BitrixClusterReconciler) deleteHPA(ctx context.Context, c *bx.BitrixClu
 		return err
 	}
 	if found {
-		return block("AutoscalingStopping", "Waiting for the owned HPA to disappear before restoring fixed replicas")
+		return waitFor("AutoscalingStopping", "Waiting for the owned HPA to disappear before restoring fixed replicas", pendingRequeueAfter)
 	}
 	return nil
 }

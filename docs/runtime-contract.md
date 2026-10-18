@@ -3,7 +3,8 @@
 Итерация добавляет чистый renderer `internal/runtime`, build-time подготовку release
 и исполняемые проверки конфигураций. В итерации 3 добавлены Deployment, Service,
 retained PVC и dependency probes — см. [web workloads](web-workloads.md). API
-не изменён; RBAC расширен для runtime-ресурсов. Site-validation Job ещё не реализован.
+не изменён; RBAC расширен для site-validation и других runtime-ресурсов. Read-only D7
+site-validation Job реализован в итерации 6.1, см. [Sites](sites.md).
 
 ## Родные файловые шаблоны — итерация 2.1
 
@@ -57,7 +58,7 @@ Fixture не содержит ядра Bitrix, не выполняет SQL и н
 ## Release image
 
 Release содержит готовое приложение в `/opt/www`, `/bin/sh` и `cp`.
-При старте будущий init container копирует `/opt/www/.` в отдельный EmptyDir;
+При старте init container копирует `/opt/www/.` в отдельный EmptyDir;
 nginx и PHP используют одну копию. Доступ к коду read-only после инициализации.
 В image не должно быть лицензии, паролей, production settings с секретами,
 пользовательских uploads или дампов БД. Зависимости и обновления Bitrix собираются
@@ -107,7 +108,7 @@ watch/rollout механизма: он реализован в итерации 
 | DB/Redis password, crypto, license | projected Secret, `/run/bitrix-secrets` | PHP/cron/validation |
 | license_key.php helper | mount поверх `/opt/www/bitrix/license_key.php` | только PHP |
 
-Проекции обязательные (`optional=false`), mode 0440, с fsGroup 979 в будущем Pod.
+Проекции обязательные (`optional=false`), mode 0440, с fsGroup 979 в runtime Pod.
 Имена файлов — SHA256 от пары Secret name/key: пользовательский key не становится
 путём. Kubernetes проецирует Secrets в namespace самого BitrixCluster. Монтировать
 нужно целый Secret volume, без `subPath`; PHP читает значения при загрузке настроек.
@@ -128,7 +129,7 @@ IPv6 endpoints пока явно отклоняются: их разбор за�
 `session.mode/lifetime/handlers`, `crypto.crypto_key`. Остальные параметры этих
 секций, например `cache.use_lock` и `session.regenerateIdAfterLogin`, сохраняются.
 Управляемые секции помечаются readonly. `default` и `separated` поддерживаются;
-TTL=0 допускается CRD, но явно отклоняется этим runtime contract.
+TTL=0 отклоняется admission validation CRD и runtime contract.
 
 nginx слушает 8080, PHP-FPM — только loopback:9000. Неизвестный Host закрывается;
 скрытые/служебные файлы и PHP в uploads запрещены. PHP выполняется только для

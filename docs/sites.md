@@ -44,24 +44,30 @@ identity. Старый результат после изменения generati
 | Condition reason | Значение |
 |---|---|
 | ValidationPending | Ожидание текущего Job или удаления предыдущего |
-| ReleaseUnresolved | Не подтверждён единый imageID готовых web Pods |
+| RuntimeUnresolved | Не подтверждён единый imageID готовых web Pods |
 | Validated | Все запрошенные site IDs существуют |
 | SiteNotFound | Есть отсутствующие IDs; существующие отмечены в status.sites |
 | ValidationUnavailable | Ошибка bootstrap/DB, формата, owner/identity или контейнера |
 | ValidationTimeout | Job превысил deadline |
 | ResultTooLarge | Ответ со всеми IDs не поместится в termination message |
 
-Успех перепроверяется через 15 минут, неуспех — через 5 минут после завершения.
-Reconcile имеет резервный интервал 30 секунд и watches Jobs/Pods; старые Jobs
-удаляются foreground с UID/resourceVersion preconditions перед новым запуском.
-Результат сбрасывается на период повторной проверки. Один текущий завершённый Job
-сохраняется до следующей попытки; TTL controller не удаляет его до чтения результата.
+Успешная проверка привязана к generation, hash конфигурации, ревизии Secrets,
+resolved release/PHP digests и UID Job. Завершённый успешный Job не удаляется
+по таймеру: каждые 15 минут перепроверки сейчас **нет**. Внешнее изменение
+SiteTable при неизменном runtime не инициирует новую validation. Отдельная
+freshness/TTL policy ещё не реализована. Неуспех повторяется через 5 минут
+после завершения Job. Reconcile работает по watches и использует резервный
+healthy resync 10–12 минут (не 30-секундный polling), при ожидании — 30 секунд.
+Старые Jobs удаляются foreground с UID/resourceVersion preconditions перед
+новым запуском. При переходе identity подтверждение старого Job не переносится
+на новый runtime; исправный подтверждённый результат не сбрасывается на
+каждом периодическом reconcile.
 
 `Ready=True` требует текущих StorageReady, WebReady, CronReady, PushReady и
 SitesValidated. Отключённые Cron/Push удовлетворяют своим Conditions как Disabled.
 Без Gateway `status.sites[].urls` пуст: наличие site ID не означает публичного URL.
 Gateway API, TLS, конфликты hosts между BitrixCluster и публикация URLs — [часть 6.2](gateway-tls.md).
-BitrixCluster API/CRD не изменены.
+Дополнительная admission validation hosts и лимиты site-result — отдельные задачи.
 
 ## Проверки и пределы доказательств
 

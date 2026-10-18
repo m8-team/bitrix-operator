@@ -28,6 +28,18 @@ func waitFor(reason, message string, after time.Duration) error {
 	return &waiting{reason: reason, message: message, retryAfter: after}
 }
 
+// Keep both the original publication block and a separate cleanup failure.
+// Cleanup errors must still use rate-limited retries rather than a blocked timer.
+type gatewayCleanupError struct {
+	reason, message string
+	cause           error
+}
+
+func (e *gatewayCleanupError) Error() string {
+	return e.message + ": route cleanup failed: " + e.cause.Error()
+}
+func (e *gatewayCleanupError) Unwrap() error { return e.cause }
+
 type reconcileFailure struct {
 	disposition reconcileDisposition
 	reason      string
@@ -39,6 +51,9 @@ type reconcileFailure struct {
 func classifyReconcileError(err error, publication bool) reconcileFailure {
 	if err == nil {
 		return reconcileFailure{disposition: dispositionWaiting, retryAfter: 30 * time.Second}
+	}
+	if issue, ok := errors.AsType[*gatewayCleanupError](err); ok {
+		return reconcileFailure{disposition: dispositionTransient, reason: issue.reason, message: issue.message + "; route cleanup failed and will retry", cause: err}
 	}
 	if issue, ok := errors.AsType[*waiting](err); ok {
 		return reconcileFailure{disposition: dispositionWaiting, reason: issue.reason, message: issue.message, retryAfter: issue.retryAfter}

@@ -54,8 +54,10 @@ read-only D7 validation Job. `SitesValidated` и `sites[].exists` отражаю
 - StorageClass, access modes и volume mode неизменяемы. Shrink запрещён; увеличение
   request возможно только при `allowVolumeExpansion=true`. Поддержку самого resize
   обеспечивает storage driver; `StorageReady` сообщает Bound, не окончание filesystem resize.
-- Старые immutable ConfigMap сохраняются до удаления CR, чтобы предыдущие ReplicaSet
-  не потеряли конфиг. Очистка неиспользуемых ревизий — отдельная последующая задача.
+- Старые immutable ConfigMap сохраняются, пока на них ссылаются Deployment,
+  ReplicaSet, Job или Pod. Оператор удаляет только неиспользуемые ревизии после
+  проверки владельца/UID/resourceVersion; при ошибке чтения ссылок очистка
+  останавливается, чтобы не удалить конфигурацию живого workload.
 
 ## Apply, события и Secrets
 
@@ -86,7 +88,7 @@ rotation, metadata watch, collision, immutable configs, PVC resize, удален
 синтаксис родными nginx/PHP tools и сохранение settings.
 
 ```sh
-# Требуются Docker, kind v0.33.0, kubectl, Go 1.26.8, Python 3.
+# Требуются Docker, kind v0.33.0, kubectl, Go 1.26.9, Python 3.
 bash hack/e2e-web.sh
 ```
 

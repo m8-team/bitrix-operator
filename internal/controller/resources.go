@@ -68,7 +68,7 @@ func (r *BitrixClusterReconciler) apply(ctx context.Context, c *bx.BitrixCluster
 		return block("ResourceCollision", fmt.Sprintf("%s %s is not controlled by this BitrixCluster", desired.GetKind(), desired.GetName()))
 	}
 	if !existing.GetDeletionTimestamp().IsZero() {
-		return block("ResourceDeleting", "An application resource is being deleted")
+		return waitFor("ResourceDeleting", "An application resource is being deleted", pendingRequeueAfter)
 	}
 	if workload.AutoscalingEnabled(c) && desired.GetKind() == deploymentKind && desired.GetName() == workload.Name(c, "web") {
 		if err = r.handoffReplicas(ctx, existing); err != nil {

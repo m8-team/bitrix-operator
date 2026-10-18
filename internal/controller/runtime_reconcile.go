@@ -104,7 +104,11 @@ func (r *BitrixClusterReconciler) prepareRuntime(ctx context.Context, c *bx.Bitr
 	if err := validateWorkload(c); err != nil {
 		return nil, err
 	}
-	bundle, err := render.RenderWithPort(c.Spec, r.publicationPort(ctx, c), workload.PushEndpoints(c))
+	port, err := r.publicationPort(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	bundle, err := render.RenderWithPort(c.Spec, port, workload.PushEndpoints(c))
 	if err != nil {
 		return nil, block("InvalidRuntimeConfiguration", err.Error())
 	}
@@ -148,16 +152,22 @@ func (r *BitrixClusterReconciler) deleteDisabledRuntime(ctx context.Context, c *
 		if err := r.deleteHPA(ctx, c); err != nil {
 			return err
 		}
+		condition(c, "AutoscalingReady", metav1.ConditionTrue, "Disabled", "Web autoscaling is disabled")
 	}
 	if !c.Spec.Runtime.Cron.Enabled {
 		if err := r.deleteCron(ctx, c); err != nil {
 			return err
 		}
+		c.Status.Runtime.Cron = bx.WorkloadStatus{}
+		condition(c, conditionCronReady, metav1.ConditionTrue, "Disabled", "Cron workload is disabled")
 	}
 	if !pushEnabled(c) {
 		if err := r.deletePush(ctx, c); err != nil {
 			return err
 		}
+		c.Status.Runtime.PushPublisher = bx.WorkloadStatus{}
+		c.Status.Runtime.PushSubscriber = bx.WorkloadStatus{}
+		condition(c, conditionPushReady, metav1.ConditionTrue, "Disabled", "Push workloads are disabled")
 	}
 	return nil
 }

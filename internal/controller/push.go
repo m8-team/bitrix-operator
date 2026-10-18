@@ -25,7 +25,7 @@ func initializePushStatus(c *bx.BitrixCluster) {
 	if pushEnabled(c) {
 		c.Status.Runtime.PushPublisher.DesiredReplicas = c.Spec.Runtime.Push.Publisher.Replicas
 		c.Status.Runtime.PushSubscriber.DesiredReplicas = c.Spec.Runtime.Push.Subscriber.Replicas
-		condition(c, "PushReady", metav1.ConditionFalse, "RolloutPending", "Waiting for the desired Push publisher and subscriber rollouts")
+		condition(c, "PushReady", metav1.ConditionUnknown, "NotObserved", "Push Deployments have not yet been observed for this generation")
 	}
 }
 
@@ -60,6 +60,8 @@ func (r *BitrixClusterReconciler) reconcilePush(ctx context.Context, c *bx.Bitri
 	}
 	if ready {
 		condition(c, "PushReady", metav1.ConditionTrue, "RolloutComplete", "Both desired Push workloads are ready")
+	} else {
+		condition(c, conditionPushReady, metav1.ConditionFalse, "RolloutPending", "Waiting for both current Push Deployment rollouts")
 	}
 	return nil
 }
@@ -76,7 +78,7 @@ func (r *BitrixClusterReconciler) deletePush(ctx context.Context, c *bx.BitrixCl
 		pending = pending || found
 	}
 	if pending {
-		return block("PushStopping", "Waiting for owned Push Deployments and their Pods to terminate")
+		return waitFor("PushStopping", "Waiting for owned Push Deployments and their Pods to terminate", pendingRequeueAfter)
 	}
 	for _, role := range []string{pushPublisher, pushSubscriber} {
 		m := metav1.ObjectMeta{Name: workload.Name(c, "push-"+role), Namespace: c.Namespace}
