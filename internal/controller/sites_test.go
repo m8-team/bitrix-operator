@@ -131,7 +131,7 @@ var _ = Describe("Site validation", func() {
 		reconcileWeb(c)
 		Expect(meta.IsStatusConditionTrue(c.Status.Conditions, "Ready")).To(BeFalse())
 	})
-	It("expires successful results and removes completed attempts", func() {
+	It("keeps successful validation evidence without periodic Ready flapping", func() {
 		c := reconcileWeb(webSample())
 		markWebReady(c)
 		reconcileWeb(c)
@@ -142,9 +142,10 @@ var _ = Describe("Site validation", func() {
 		}
 		Expect(k8sClient.Status().Update(ctx, j)).To(Succeed())
 		reconcileWeb(c)
-		Expect(meta.IsStatusConditionTrue(c.Status.Conditions, "Ready")).To(BeFalse())
+		Expect(meta.IsStatusConditionTrue(c.Status.Conditions, "Ready")).To(BeTrue())
+		Expect(meta.IsStatusConditionTrue(c.Status.Conditions, "SitesValidated")).To(BeTrue())
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(j), j)).To(Succeed())
-		Expect(j.DeletionTimestamp.IsZero()).To(BeFalse())
+		Expect(j.DeletionTimestamp.IsZero()).To(BeTrue())
 	})
 	It("does not reuse a successful result after Secret rotation", func() {
 		c := reconcileWeb(webSample())
