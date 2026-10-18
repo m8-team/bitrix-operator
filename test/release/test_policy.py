@@ -21,6 +21,20 @@ class ReleasePolicyTest(unittest.TestCase):
             with self.subTest(tag=tag), self.assertRaises(ValueError):
                 policy.validate_tag(tag)
 
+    def test_main_can_advance_while_rc_awaits_approval(self):
+        for compare in [{"status": "identical", "behind_by": 0},
+                        {"status": "ahead", "behind_by": 0, "ahead_by": 6}]:
+            with self.subTest(compare=compare):
+                policy.validate_main_ancestry(compare)
+
+    def test_tag_on_unmerged_or_rebased_sha_is_rejected(self):
+        for compare in [{"status": "behind", "behind_by": 1},
+                        {"status": "diverged", "behind_by": 2},
+                        {"status": "ahead", "behind_by": 1},
+                        {"status": "unknown", "behind_by": 0}]:
+            with self.subTest(compare=compare), self.assertRaises(ValueError):
+                policy.validate_main_ancestry(compare)
+
     def test_green_main(self):
         policy.validate_runs([self.run_record()], "abc")
 
