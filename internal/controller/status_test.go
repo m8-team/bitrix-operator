@@ -11,6 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
 func TestStatusInitializationWithoutKubernetes(t *testing.T) {
 	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 7}}
 	c.Spec.Sites = []bx.BitrixSiteSpec{{ID: "store"}}
