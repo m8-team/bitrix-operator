@@ -7,7 +7,6 @@ import (
 	render "github.com/m8-team/bitrix-operator/internal/runtime"
 	"github.com/m8-team/bitrix-operator/internal/workload"
 	appsv1 "k8s.io/api/apps/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -15,24 +14,15 @@ import (
 // Disable is independent of current Secrets/storage validity and never deletes a foreign object.
 // Foreground deletion keeps web agent settings unchanged until the old workers have terminated.
 func (r *BitrixClusterReconciler) deleteCron(ctx context.Context, c *bx.BitrixCluster) error {
-	d := &appsv1.Deployment{}
-	err := r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "cron")}, d)
-	if apierrors.IsNotFound(err) {
-		return nil
-	}
+	d := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: workload.Name(c, "cron"), Namespace: c.Namespace}}
+	found, err := r.deleteOwnedResource(ctx, c, d, true)
 	if err != nil {
 		return err
 	}
-	if !controlledByCluster(c, d) {
-		return block("ResourceCollision", "The cron Deployment is not controlled by this BitrixCluster")
+	if found {
+		return block("CronStopping", "Waiting for the owned cron Deployment and its Pods to terminate")
 	}
-	if d.DeletionTimestamp.IsZero() {
-		err = r.Delete(ctx, d, client.Preconditions{UID: &d.UID, ResourceVersion: &d.ResourceVersion}, client.PropagationPolicy(metav1.DeletePropagationForeground))
-		if err != nil && !apierrors.IsNotFound(err) {
-			return err
-		}
-	}
-	return block("CronStopping", "Waiting for the owned cron Deployment and its Pods to terminate")
+	return nil
 }
 
 func (r *BitrixClusterReconciler) reconcileCron(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision, image string, bound bool) error {
