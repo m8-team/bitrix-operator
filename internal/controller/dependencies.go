@@ -19,8 +19,10 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gateway "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -154,7 +156,11 @@ func (r *BitrixClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			Watches(&gateway.GatewayClass{}, handler.EnqueueRequestsFromMapFunc(r.gatewayRequests)).
 			Watches(&gateway.ReferenceGrant{}, handler.EnqueueRequestsFromMapFunc(r.gatewayRequests)).
 			WatchesMetadata(&corev1.Namespace{}, handler.EnqueueRequestsFromMapFunc(r.gatewayRequests)).
-			Watches(&bx.BitrixCluster{}, handler.EnqueueRequestsFromMapFunc(r.gatewayRequests))
+			// A status-only update does not change a shared Gateway hostname reservation.
+			// The primary watch still reconciles the updated CR itself; avoid
+			// enqueuing all of its Gateway siblings on every status patch.
+			Watches(&bx.BitrixCluster{}, handler.EnqueueRequestsFromMapFunc(r.gatewayRequests),
+				builder.WithPredicates(predicate.GenerationChangedPredicate{}))
 	}
 	return b.Complete(r)
 }
