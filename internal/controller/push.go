@@ -76,7 +76,7 @@ func (r *BitrixClusterReconciler) deletePush(ctx context.Context, c *bx.BitrixCl
 		pending = pending || found
 	}
 	if pending {
-		return block("PushStopping", "Waiting for owned Push Deployments and their Pods to terminate")
+		return waitFor("PushStopping", "Waiting for owned Push Deployments and their Pods to terminate", pendingRequeueAfter)
 	}
 	for _, role := range []string{pushPublisher, pushSubscriber} {
 		m := metav1.ObjectMeta{Name: workload.Name(c, "push-"+role), Namespace: c.Namespace}
