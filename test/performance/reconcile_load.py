@@ -10,6 +10,7 @@ import sys
 import time
 import uuid
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
 
 RUN_LABEL = "perf.bitrix.m8.team/run"
 SIZES = (10, 100, 1000)
@@ -43,7 +44,8 @@ def kubectl(context, args, payload=None, timeout=300):
     )
     if proc.returncode != 0:
         # Never include stderr or submitted CR fields in CI errors.
-        raise RuntimeError("kubectl " + args[0] + " failed (exit " + str(proc.returncode) + ")")
+        operation = next((x for x in args if x in ("get", "create", "patch", "delete")), "command")
+        raise RuntimeError("kubectl " + operation + " failed (exit " + str(proc.returncode) + ")")
     return proc.stdout
 
 
@@ -85,29 +87,54 @@ def manifests(sample, namespace, run_id, count):
     return values
 
 
+def patch_objects(context, namespace, records, payload, workers):
+    """Patch only the CRs created by this test, at bounded concurrency.
+
+    kubectl patch requires named resources or -f; unlike kubectl get/delete,
+    it does not accept a bare -l selector.
+    """
+    patch = json.dumps(payload)
+
+    def patch_one(record):
+        name = record["metadata"]["name"]
+        kubectl(context, [
+            "-n", namespace, "patch", "bitrixcluster", name,
+            "--type=merge", "-p", patch, "-o", "name",
+        ], timeout=90)
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        for _ in executor.map(patch_one, records):
+            pass
+
+
 def exercise(context, sample, run_id, count, args):
     ns = "bitrix-perf-" + run_id + "-" + str(count)
     kubectl(context, ["create", "namespace", ns], timeout=45)
+    result = {"size": count, "create": None, "spec_update": None}
+    phase = "create"
     try:
-        resources = manifests(sample, ns, run_id, count)
-        started = time.monotonic()
-        for offset in range(0, count, args.batch_size):
-            payload = {
-                "apiVersion": "v1", "kind": "List",
-                "items": resources[offset:offset + args.batch_size],
-            }
-            kubectl(context, ["create", "-f", "-", "-o", "name"], payload, timeout=240)
-        created = collect(context, ns, count, started, args.timeout, args.poll)
-        if not created["complete"]:
-            return {"size": count, "create": created, "spec_update": None}
-        started = time.monotonic()
-        patch = {"spec": {"release": {"image": {"tag": "perf-" + run_id}}}}
-        kubectl(context, [
-            "-n", ns, "patch", "bitrixclusters", "-l", RUN_LABEL + "=" + run_id,
-            "--type=merge", "-p", json.dumps(patch), "-o", "name",
-        ], timeout=300)
-        updated = collect(context, ns, count, started, args.timeout, args.poll)
-        return {"size": count, "create": created, "spec_update": updated}
+        try:
+            resources = manifests(sample, ns, run_id, count)
+            started = time.monotonic()
+            for offset in range(0, count, args.batch_size):
+                payload = {
+                    "apiVersion": "v1", "kind": "List",
+                    "items": resources[offset:offset + args.batch_size],
+                }
+                kubectl(context, ["create", "-f", "-", "-o", "name"], payload, timeout=240)
+            result["create"] = collect(context, ns, count, started, args.timeout, args.poll)
+            if not result["create"]["complete"]:
+                return result
+            phase = "spec_update"
+            started = time.monotonic()
+            patch = {"spec": {"release": {"image": {"tag": "perf-" + run_id}}}}
+            patch_objects(context, ns, resources, patch, args.patch_workers)
+            result["spec_update"] = collect(context, ns, count, started, args.timeout, args.poll)
+        except (RuntimeError, subprocess.TimeoutExpired) as exc:
+            # Keep finished phase measurements in the uploaded artifact.
+            # Do not serialize untrusted stderr or manifest contents.
+            result["failure"] = {"phase": phase, "type": type(exc).__name__, "message": str(exc) if isinstance(exc, RuntimeError) else "kubectl timeout"}
+        return result
     finally:
         if args.keep:
             print("Retained temporary test namespace:", ns, flush=True)
@@ -124,14 +151,15 @@ def main(argv=None):
     parser.add_argument("--timeout", type=float, default=300)
     parser.add_argument("--poll", type=float, default=1)
     parser.add_argument("--batch-size", type=int, default=100)
+    parser.add_argument("--patch-workers", type=int, default=8)
     parser.add_argument("--keep", action="store_true")
     args = parser.parse_args(argv)
     if not args.context.startswith("kind-"):
         parser.error("Refusing a non-kind context; only disposable kind clusters are supported")
     if len(set(args.sizes)) != len(args.sizes) or not args.sizes or any(n not in SIZES for n in args.sizes):
         parser.error("sizes must be a unique subset of 10, 100, 1000")
-    if args.timeout <= 0 or args.poll <= 0 or not 1 <= args.batch_size <= 250:
-        parser.error("invalid timeout, poll or batch size")
+    if args.timeout <= 0 or args.poll <= 0 or not 1 <= args.batch_size <= 250 or not 1 <= args.patch_workers <= 16:
+        parser.error("invalid timeout, poll, batch-size or patch-workers (max 16)")
     if not pathlib.Path(args.sample).is_file():
         parser.error("sample file does not exist")
     kubectl(args.context, ["get", "crd", "bitrixclusters.bitrix.m8.team"], timeout=30)
@@ -155,7 +183,7 @@ def main(argv=None):
             result = exercise(args.context, sample, run_id, count, args)
             report["sizes"].append(result)
             print(json.dumps(result, sort_keys=True), flush=True)
-            if not result["create"]["complete"] or (
+            if result.get("failure") or result["create"] is None or not result["create"]["complete"] or (
                 result["spec_update"] is not None and not result["spec_update"]["complete"]
             ):
                 failed = True

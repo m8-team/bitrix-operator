@@ -1,7 +1,9 @@
 """Hermetic performance harness tests; no kubeconfig or kind required."""
 import copy
+import argparse
 import importlib.util
 import pathlib
+import json
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -44,6 +46,33 @@ class TestHarness(unittest.TestCase):
     def test_guard_rejects_non_kind(self):
         with self.assertRaises(SystemExit):
             load.main(["--context", "production-cluster"])
+
+    def test_patch_is_scoped_to_each_created_object(self):
+        sample = {"metadata": {"name": "sample"}}
+        records = load.manifests(sample, "bitrix-perf-test", "12345678", 10)
+        payload = {"spec": {"release": {"image": {"tag": "perf-12345678"}}}}
+        with patch.object(load, "kubectl", return_value="") as command:
+            load.patch_objects("kind-ci", "bitrix-perf-test", records, payload, 4)
+        self.assertEqual(command.call_count, 10)
+        names = []
+        for invocation in command.call_args_list:
+            context, argv = invocation.args[:2]
+            self.assertEqual(context, "kind-ci")
+            self.assertEqual(argv[:4], ["-n", "bitrix-perf-test", "patch", "bitrixcluster"])
+            self.assertNotIn("-l", argv)
+            self.assertEqual(argv[5:7], ["--type=merge", "-p"])
+            self.assertEqual(json.loads(argv[7]), payload)
+            names.append(argv[4])
+        self.assertEqual(sorted(names), sorted(x["metadata"]["name"] for x in records))
+
+    def test_update_error_keeps_create_measurement(self):
+        args = argparse.Namespace(batch_size=100, patch_workers=2, timeout=1, poll=0.1, keep=True)
+        status = {"observed": 10, "pending": 0, "complete": True}
+        with patch.object(load, "kubectl", return_value=""), patch.object(load, "collect", return_value=status), patch.object(load, "patch_objects", side_effect=RuntimeError("kubectl patch failed (exit 1)")):
+            result = load.exercise("kind-ci", {"kind": "BitrixCluster"}, "run12345", 10, args)
+        self.assertEqual(result["create"], status)
+        self.assertIsNone(result["spec_update"])
+        self.assertEqual(result["failure"]["phase"], "spec_update")
 
     def test_failed_kubectl_does_not_echo_payload(self):
         with patch.object(load.subprocess, "run", return_value=subprocess.CompletedProcess(
