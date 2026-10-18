@@ -47,35 +47,76 @@ func initializeReconcileStatus(c *bx.BitrixCluster) {
 	condition(c, "StorageReady", metav1.ConditionUnknown, "NotObserved", "Uploads storage has not been observed")
 }
 
-// resolveReconcileResult is pure: no API calls, client state or status writes.
-// Unit tests can exercise error policy and Conditions independently of Kubernetes.
+// resolveReconcileResult is pure and owns the final readiness/error policy.
+// A failure in a later stage must never rewrite an already observed WebReady,
+// CronReady, or PushReady condition from an unrelated component.
 func resolveReconcileResult(c *bx.BitrixCluster, resourceErr, gatewayErr error) (ctrl.Result, error) {
-	result := ctrl.Result{RequeueAfter: 30 * time.Second}
-	var gatewayRetry time.Duration
+	runtimeIssue := classifyReconcileError(resourceErr, false)
+	publicationIssue := classifyReconcileError(gatewayErr, true)
+
 	if gatewayErr != nil {
-		issue := classifyReconcileError(gatewayErr, true)
-		condition(c, "GatewayReady", metav1.ConditionFalse, issue.reason, issue.message)
-		gatewayRetry = issue.retryAfter
-		gatewayErr = issue.cause
+		condition(c, "GatewayReady", metav1.ConditionFalse, publicationIssue.reason, publicationIssue.message)
 	}
-	if resourceErr == nil {
-		summarizeReadiness(c)
+	if resourceErr != nil {
+		condition(c, "Ready", metav1.ConditionFalse, runtimeIssue.reason, runtimeIssue.message)
+		attributeComponentFailure(c, resourceErr, runtimeIssue)
 	} else {
-		issue := classifyReconcileError(resourceErr, false)
-		result.RequeueAfter = issue.retryAfter
-		c.Status.Phase = bx.BitrixClusterPhaseDegraded
-		condition(c, "Ready", metav1.ConditionFalse, issue.reason, issue.message)
-		condition(c, "WebReady", metav1.ConditionFalse, issue.reason, issue.message)
-		if pushEnabled(c) || issue.reason == "PushStopping" {
-			condition(c, "PushReady", metav1.ConditionFalse, issue.reason, issue.message)
-		}
-		if c.Spec.Runtime.Cron.Enabled || issue.reason == "CronStopping" {
-			condition(c, "CronReady", metav1.ConditionFalse, issue.reason, issue.message)
-		}
-		resourceErr = issue.cause
+		summarizeReadiness(c)
 	}
-	result.RequeueAfter = shorterRequeue(result.RequeueAfter, gatewayRetry)
-	return result, errors.Join(resourceErr, gatewayErr)
+	if (resourceErr != nil && runtimeIssue.disposition != dispositionWaiting) ||
+		(gatewayErr != nil && publicationIssue.disposition != dispositionWaiting) {
+		c.Status.Phase = bx.BitrixClusterPhaseDegraded
+	}
+
+	// The controller-runtime workqueue ignores RequeueAfter when err != nil.
+	// Returning an empty Result here makes that retry behavior explicit.
+	if runtimeIssue.disposition == dispositionTransient || publicationIssue.disposition == dispositionTransient {
+		return ctrl.Result{}, errors.Join(runtimeIssue.cause, publicationIssue.cause)
+	}
+
+	retry := 30 * time.Second
+	if resourceErr != nil {
+		retry = runtimeIssue.retryAfter
+	}
+	if gatewayErr != nil {
+		retry = shorterRequeue(retry, publicationIssue.retryAfter)
+	}
+	return ctrl.Result{RequeueAfter: retry}, nil
+}
+
+// Attribute a failure only to the stage that failed. In particular, a GC or
+// validation error is not evidence that an observed web rollout stopped.
+func attributeComponentFailure(c *bx.BitrixCluster, err error, issue reconcileFailure) {
+	stage := ""
+	for _, name := range []string{"push", "web", "cron", "web-status", "sites"} {
+		if failedComponent(err, name) {
+			stage = name
+			break
+		}
+	}
+	kind := ""
+	switch stage {
+	case "push":
+		kind = "PushReady"
+	case "web":
+		kind = "WebReady"
+	case "cron":
+		kind = "CronReady"
+	case "sites":
+		kind = "SitesValidated"
+	case "web-status":
+		kind = "WebReady"
+		if meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") && workload.AutoscalingEnabled(c) {
+			kind = "AutoscalingReady"
+		}
+	}
+	if kind == "" {
+		return
+	}
+	if existing := meta.FindStatusCondition(c.Status.Conditions, kind); existing != nil && existing.Status == metav1.ConditionTrue {
+		return
+	}
+	condition(c, kind, metav1.ConditionFalse, issue.reason, issue.message)
 }
 
 func preserveConditionTransitions(before, c *bx.BitrixCluster) {
