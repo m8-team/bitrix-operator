@@ -36,7 +36,7 @@ States: `desired`, `ready`, `updated`, `available`. При отсутствии 
 счётчиков нет. Существующие счётчики могут быть устаревшими — проверяйте generation.
 Для HPA desired берётся из наблюдённого Deployment через status.
 
-Не более 43 серий на CR (включая timestamp успешной проверки, если он есть) и четыре серии snapshot collector на manager, не считая длительности сбора.
+Не более 43 серий на CR (включая timestamp успешной проверки, если он есть) и четыре серии snapshot collector на manager (включая длительность сбора).
 Дополнительные метрики стадий имеют фиксированный список stage
 (`prepare`, `config`, `push`, `web`, `cron`, `web-status`, `sites`,
 `config-gc`, `gateway`, `other`) и outcome (`success`, `Waiting`, `Blocked`,
