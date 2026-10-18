@@ -155,7 +155,7 @@ type BitrixSiteSpec struct {
 	// Hosts contains lowercase DNS-1123 subdomains routed to this Bitrix site.
 	// Literal IP addresses, wildcard names and duplicates across sites are forbidden.
 	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=16
+	// +kubebuilder:validation:MaxItems=32
 	// +kubebuilder:validation:items:MinLength=1
 	// +kubebuilder:validation:items:MaxLength=253
 	// +kubebuilder:validation:items:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
