@@ -28,7 +28,6 @@ import (
 	"github.com/m8-team/bitrix-operator/internal/workload"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -107,44 +106,31 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	condition(c, "StorageReady", metav1.ConditionUnknown, "NotObserved", "Uploads storage has not been observed")
 	err := r.reconcileResources(ctx, c)
 	gatewayErr := r.reconcileGateway(ctx, c, err == nil)
-	if gatewayErr != nil {
-		reason, message := "PublicationFailed", "Could not reconcile Gateway publication"
-		if issue, ok := errors.AsType[*blocked](gatewayErr); ok {
-			reason, message = issue.reason, issue.message
-			gatewayErr = nil
-		} else if apierrors.IsConflict(gatewayErr) || apierrors.IsAlreadyExists(gatewayErr) {
-			reason, message = "ResourceConflict", "A Gateway publication resource changed concurrently"
-			gatewayErr = nil
-		}
-		condition(c, "GatewayReady", metav1.ConditionFalse, reason, message)
-	}
 	result := ctrl.Result{RequeueAfter: 30 * time.Second}
+	var gatewayRetry time.Duration
+	if gatewayErr != nil {
+		issue := classifyReconcileError(gatewayErr, true)
+		condition(c, "GatewayReady", metav1.ConditionFalse, issue.reason, issue.message)
+		gatewayRetry = issue.retryAfter
+		gatewayErr = issue.cause
+	}
 	if err == nil {
 		summarizeReadiness(c)
-	}
-	if err != nil {
-		reason, message := "ReconcileFailed", "Could not reconcile application resources; see controller logs"
-		if issue, ok := errors.AsType[*blocked](err); ok {
-			reason, message = issue.reason, issue.message
-			err = nil
-			result.RequeueAfter = time.Minute
-		}
-		if apierrors.IsConflict(err) {
-			ctrl.LoggerFrom(ctx).Info("Resource apply conflicted", "error", err)
-			reason, message = "ApplyConflict", "A resource changed or an owned field has a conflicting manager"
-			err = nil
-			result.RequeueAfter = 10 * time.Second
-		}
+	} else {
+		issue := classifyReconcileError(err, false)
+		result.RequeueAfter = issue.retryAfter
 		c.Status.Phase = bx.BitrixClusterPhaseDegraded
-		condition(c, "Ready", metav1.ConditionFalse, reason, message)
-		condition(c, "WebReady", metav1.ConditionFalse, reason, message)
-		if pushEnabled(c) || reason == "PushStopping" {
-			condition(c, "PushReady", metav1.ConditionFalse, reason, message)
+		condition(c, "Ready", metav1.ConditionFalse, issue.reason, issue.message)
+		condition(c, "WebReady", metav1.ConditionFalse, issue.reason, issue.message)
+		if pushEnabled(c) || issue.reason == "PushStopping" {
+			condition(c, "PushReady", metav1.ConditionFalse, issue.reason, issue.message)
 		}
-		if c.Spec.Runtime.Cron.Enabled || reason == "CronStopping" {
-			condition(c, "CronReady", metav1.ConditionFalse, reason, message)
+		if c.Spec.Runtime.Cron.Enabled || issue.reason == "CronStopping" {
+			condition(c, "CronReady", metav1.ConditionFalse, issue.reason, issue.message)
 		}
+		err = issue.cause
 	}
+	result.RequeueAfter = shorterRequeue(result.RequeueAfter, gatewayRetry)
 	// Conditions are evaluated provisionally above. Preserve transition times for unchanged final states.
 	for i := range c.Status.Conditions {
 		previous := meta.FindStatusCondition(before.Status.Conditions, c.Status.Conditions[i].Type)

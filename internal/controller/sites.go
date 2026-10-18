@@ -201,17 +201,18 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 	if !complete {
 		return nil
 	}
+	// A successful Job is the durable, identity-bound proof for this runtime.
+	// Keep it until generation, rendered config, Secrets or resolved image digests
+	// change. Periodic deletion would briefly mark healthy clusters NotReady.
+	// Failed validations are retried to allow eventual recovery.
 	retryAfter := 5 * time.Minute
-	if result.Reason == sitesValidated {
-		retryAfter = 15 * time.Minute
-	}
 	completed := job.CreationTimestamp.Time
 	for _, condition := range job.Status.Conditions {
 		if condition.Status == corev1.ConditionTrue && (condition.Type == batchv1.JobComplete || condition.Type == batchv1.JobFailed) {
 			completed = condition.LastTransitionTime.Time
 		}
 	}
-	if time.Since(completed) >= retryAfter {
+	if result.Reason != sitesValidated && time.Since(completed) >= retryAfter {
 		return r.deleteValidationJob(ctx, job)
 	}
 	status := metav1.ConditionFalse

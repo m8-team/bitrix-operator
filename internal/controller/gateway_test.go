@@ -1,12 +1,14 @@
 package controller
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -72,7 +74,29 @@ func certificateSecret(c *bx.BitrixCluster, host string, expires time.Time) *cor
 	return &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "site-tls", Namespace: c.Namespace}, Type: corev1.SecretTypeTLS, Data: map[string][]byte{corev1.TLSCertKey: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), corev1.TLSPrivateKeyKey: pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})}}
 }
 
+// A failing live reader models temporary Gateway API unavailability.
+type gatewayReadFailure struct{ client.Reader }
+
+func (r gatewayReadFailure) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if _, ok := obj.(*gateway.Gateway); ok {
+		return errors.New("temporary Gateway API failure")
+	}
+	return r.Reader.Get(ctx, key, obj, opts...)
+}
+
 var _ = Describe("Gateway publication", func() {
+	It("retains the last-known-good HTTPRoute when the Gateway API fails", func() {
+		c := reconcileWeb(webSample())
+		gatewaySample(c)
+		reconcilePublished(c)
+		original := siteRoute(c)
+		r := &BitrixClusterReconciler{
+			Client: k8sClient, Scheme: k8sClient.Scheme(), GatewayAPIAvailable: true,
+			APIReader: gatewayReadFailure{Reader: k8sClient},
+		}
+		Expect(r.reconcileGateway(ctx, c, true)).To(HaveOccurred())
+		Expect(siteRoute(c).UID).To(Equal(original.UID))
+	})
 	It("does not require Gateway CRDs for internal workloads", func() {
 		mapper := meta.NewDefaultRESTMapper([]schema.GroupVersion{{Group: gateway.GroupName, Version: "v1"}})
 		available, err := gatewayAPIsAvailable(mapper)
