@@ -33,4 +33,3 @@ func validateWorkload(c *bx.BitrixCluster) error {
 }
 
 func deploymentObject() *appsv1.Deployment { return &appsv1.Deployment{} }
-

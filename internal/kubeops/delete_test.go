@@ -59,7 +59,6 @@ func TestGuardedDeleteWithoutAPIServer(t *testing.T) {
 	}
 }
 
-
 func TestControlledByVerifiesIdentity(t *testing.T) {
 	owner := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{UID: types.UID("owner")}}
 	obj := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{{UID: owner.UID, Kind: "ConfigMap", APIVersion: "v1", Controller: ptr.To(true)}}}}
