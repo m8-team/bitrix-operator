@@ -241,7 +241,7 @@ func (r *BitrixClusterReconciler) publicationPort(ctx context.Context, c *bx.Bit
 	}
 	p := c.Spec.Networking.Gateway.ParentRef
 	g := &gateway.Gateway{}
-	if r.reader().Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: p.Name}, g) != nil {
+	if r.observationReader().Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: p.Name}, g) != nil {
 		return 0
 	}
 	for _, l := range g.Spec.Listeners {

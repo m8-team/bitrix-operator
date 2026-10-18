@@ -23,10 +23,18 @@ type blocked struct{ reason, message string }
 func (e *blocked) Error() string         { return e.message }
 func block(reason, message string) error { return &blocked{reason, message} }
 
+// reader makes direct API calls for ownership checks, Secret data, guarded
+// mutation and read-after-write paths where eventual consistency is unsafe.
 func (r *BitrixClusterReconciler) reader() client.Reader {
 	if r.APIReader != nil {
 		return r.APIReader
 	}
+	return r.Client
+}
+
+// observationReader uses the shared informer cache for rollout observations.
+// The controller watches the related Pods, Deployments and Gateway objects.
+func (r *BitrixClusterReconciler) observationReader() client.Reader {
 	return r.Client
 }
 
