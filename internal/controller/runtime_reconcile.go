@@ -11,13 +11,13 @@ import (
 )
 
 const (
- stagePush = "push"
- stageWeb = "web"
- stageCron = "cron"
- stageWebStatus = "web-status"
- stageSites = "sites"
- conditionWebReady = "WebReady"
- conditionSitesValidated = "SitesValidated"
+	stagePush               = "push"
+	stageWeb                = "web"
+	stageCron               = "cron"
+	stageWebStatus          = "web-status"
+	stageSites              = "sites"
+	conditionWebReady       = "WebReady"
+	conditionSitesValidated = "SitesValidated"
 )
 
 // runtimeInputs contain reconcile-local dependencies shared across stages.
