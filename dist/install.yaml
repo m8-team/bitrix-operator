@@ -702,6 +702,28 @@ spec:
                 - cron
                 - web
                 type: object
+              siteValidation:
+                description: |-
+                  SiteValidation is the latest successful, identity-bound validation proof.
+                  It remains available during background refresh, even after the old Job is deleted.
+                properties:
+                  identity:
+                    description: Identity is the deterministic validation Job name
+                      for the observed runtime.
+                    type: string
+                  jobUID:
+                    description: JobUID identifies the successful Job attempt.
+                    type: string
+                  validatedAt:
+                    description: ValidatedAt is the successful Job completion time
+                      used for TTL and staleness.
+                    format: date-time
+                    type: string
+                required:
+                - identity
+                - jobUID
+                - validatedAt
+                type: object
               sites:
                 description: |-
                   Sites maps existing Bitrix site IDs to externally published hosts.
