@@ -1,12 +1,15 @@
 package controller
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func TestStatusInitializationWithoutKubernetes(t *testing.T) {
@@ -54,5 +57,77 @@ func TestStatusTransitionTimesAreStable(t *testing.T) {
 	preserveConditionTransitions(before, after)
 	if got := meta.FindStatusCondition(after.Status.Conditions, "Ready"); got.LastTransitionTime == before.Status.Conditions[0].LastTransitionTime {
 		t.Fatal("a status change must retain its new transition time")
+	}
+}
+
+func TestUnrelatedStageFailurePreservesObservedConditions(t *testing.T) {
+	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 3}}
+	initializeReconcileStatus(c)
+	condition(c, "WebReady", metav1.ConditionTrue, "RolloutComplete", "web ready")
+	condition(c, "SitesValidated", metav1.ConditionTrue, "Validated", "site validated")
+	condition(c, "StorageReady", metav1.ConditionTrue, "VolumeBound", "storage bound")
+	gcErr := errors.New("failed to inspect configmap references")
+	result, err := resolveReconcileResult(c, &componentError{name: "config-gc", cause: gcErr}, nil)
+	if !errors.Is(err, gcErr) || result.RequeueAfter != 0 {
+		t.Fatalf("transient error must use rate-limited queue: result=%+v err=%v", result, err)
+	}
+	for _, kind := range []string{"WebReady", "SitesValidated", "StorageReady"} {
+		if !meta.IsStatusConditionTrue(c.Status.Conditions, kind) {
+			t.Fatalf("unrelated %s was cleared: %+v", kind, c.Status.Conditions)
+		}
+	}
+	if meta.IsStatusConditionTrue(c.Status.Conditions, "Ready") ||
+		c.Status.Phase != bx.BitrixClusterPhaseDegraded ||
+		meta.FindStatusCondition(c.Status.Conditions, "Ready").Reason != "ReconcileFailed" {
+		t.Fatalf("overall failure missing after GC error: %+v", c.Status)
+	}
+}
+
+func TestSiteFailureDoesNotInvalidateWebRollout(t *testing.T) {
+	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 8}}
+	initializeReconcileStatus(c)
+	condition(c, "WebReady", metav1.ConditionTrue, "RolloutComplete", "web ready")
+	_, err := resolveReconcileResult(c, &componentError{name: "sites", cause: block("ValidationUnavailable", "validation failed")}, nil)
+	if err != nil {
+		t.Fatalf("blocked validation should not be a rate-limited error: %v", err)
+	}
+	if !meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") {
+		t.Fatalf("site error cleared web readiness: %+v", c.Status.Conditions)
+	}
+	if site := meta.FindStatusCondition(c.Status.Conditions, "SitesValidated"); site.Status != metav1.ConditionFalse || site.Reason != "ValidationUnavailable" {
+		t.Fatalf("expected attributed site failure, got %+v", site)
+	}
+}
+
+func TestGatewayFailureIsIndependentOfRuntime(t *testing.T) {
+	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 4}}
+	initializeReconcileStatus(c)
+	condition(c, "WebReady", metav1.ConditionTrue, "RolloutComplete", "web ready")
+	gatewayErr := errors.New("gateway unavailable")
+	result, err := resolveReconcileResult(c, nil, gatewayErr)
+	if !errors.Is(err, gatewayErr) || result.RequeueAfter != 0 {
+		t.Fatalf("gateway error should use rate limiter: result=%+v err=%v", result, err)
+	}
+	if !meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") {
+		t.Fatalf("gateway error must not reset web readiness: %+v", c.Status.Conditions)
+	}
+	if gw := meta.FindStatusCondition(c.Status.Conditions, "GatewayReady"); gw == nil || gw.Reason != "PublicationFailed" {
+		t.Fatalf("missing Gateway error status: %+v", gw)
+	}
+}
+
+func TestConflictIsWaitingNotTransient(t *testing.T) {
+	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 4}}
+	initializeReconcileStatus(c)
+	conflict := apierrors.NewConflict(schema.GroupResource{Resource: "deployments"}, "web", errors.New("conflict"))
+	result, err := resolveReconcileResult(c, &componentError{name: "web", cause: conflict}, nil)
+	if err != nil || result.RequeueAfter != 10*time.Second {
+		t.Fatalf("conflict should be scheduled, not rate limited: result=%+v err=%v", result, err)
+	}
+	if c.Status.Phase != bx.BitrixClusterPhaseProgressing {
+		t.Fatalf("expected progressing phase on conflict, got %s", c.Status.Phase)
+	}
+	if web := meta.FindStatusCondition(c.Status.Conditions, "WebReady"); web.Reason != "ApplyConflict" {
+		t.Fatalf("missing component-specific conflict: %+v", web)
 	}
 }
