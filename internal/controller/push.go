@@ -25,7 +25,7 @@ func initializePushStatus(c *bx.BitrixCluster) {
 	if pushEnabled(c) {
 		c.Status.Runtime.PushPublisher.DesiredReplicas = c.Spec.Runtime.Push.Publisher.Replicas
 		c.Status.Runtime.PushSubscriber.DesiredReplicas = c.Spec.Runtime.Push.Subscriber.Replicas
-		condition(c, "PushReady", metav1.ConditionFalse, "RolloutPending", "Waiting for the desired Push publisher and subscriber rollouts")
+		condition(c, "PushReady", metav1.ConditionUnknown, "NotObserved", "Push Deployments have not yet been observed for this generation")
 	}
 }
 
