@@ -16,6 +16,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -49,16 +50,17 @@ func containerDigest(p *corev1.Pod, name string) string {
 // the Deployment -> ReplicaSet -> Pod ownership chain is checked before using status.
 func (r *BitrixClusterReconciler) observedRuntimeDigests(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision, image string) (string, string, error) {
 	pods := &corev1.PodList{}
-	if err := r.reader().List(ctx, pods, client.InNamespace(c.Namespace), client.MatchingLabels{workload.OwnerUID: string(c.UID), "app.kubernetes.io/name": "bitrix"}); err != nil {
+	if err := r.observationReader().List(ctx, pods, client.InNamespace(c.Namespace), client.MatchingLabels{workload.OwnerUID: string(c.UID), "app.kubernetes.io/name": "bitrix"}); err != nil {
 		return "", "", err
 	}
 	deployment := &appsv1.Deployment{}
-	if err := r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "web")}, deployment); err != nil {
+	if err := r.observationReader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "web")}, deployment); err != nil {
 		return "", "", err
 	}
 	release := ""
 	php := ""
 	observed := int32(0)
+	validOwners := make(map[types.UID]bool)
 	for _, p := range pods.Items {
 		if !p.DeletionTimestamp.IsZero() || p.Annotations[workload.ConfigHash] != b.Hash || p.Annotations[workload.SecretRevision] != revision {
 			continue
@@ -70,15 +72,22 @@ func (r *BitrixClusterReconciler) observedRuntimeDigests(ctx context.Context, c 
 		if owner == nil || owner.Kind != "ReplicaSet" || owner.APIVersion != appsv1.SchemeGroupVersion.String() {
 			continue
 		}
-		rs := &appsv1.ReplicaSet{}
-		if err := r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: owner.Name}, rs); err != nil {
-			if apierrors.IsNotFound(err) {
-				continue
+		// All Pods of a ReplicaSet share its ownership chain. Fetch it once.
+		valid, checked := validOwners[owner.UID]
+		if !checked {
+			rs := &appsv1.ReplicaSet{}
+			if err := r.observationReader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: owner.Name}, rs); err != nil {
+				if !apierrors.IsNotFound(err) {
+					return "", "", err
+				}
+			} else {
+				parent := metav1.GetControllerOf(rs)
+				valid = rs.UID == owner.UID && parent != nil && parent.UID == deployment.UID &&
+					parent.Kind == deploymentKind && parent.APIVersion == appsv1.SchemeGroupVersion.String()
 			}
-			return "", "", err
+			validOwners[owner.UID] = valid
 		}
-		parent := metav1.GetControllerOf(rs)
-		if rs.UID != owner.UID || parent == nil || parent.UID != deployment.UID || parent.Kind != deploymentKind || parent.APIVersion != appsv1.SchemeGroupVersion.String() {
+		if !valid {
 			continue
 		}
 		observed++
@@ -246,6 +255,8 @@ func (r *BitrixClusterReconciler) siteResult(ctx context.Context, c *bx.BitrixCl
 		return unavailable, false, nil
 	}
 	pods := &corev1.PodList{}
+	// The completed Job's result is a security-sensitive, one-shot proof.
+	// Read it directly: informer lag must not turn a valid result into a failure.
 	if err := r.reader().List(ctx, pods, client.InNamespace(c.Namespace), client.MatchingLabels{"batch.kubernetes.io/controller-uid": string(job.UID)}); err != nil {
 		return unavailable, false, err
 	}
