@@ -17,7 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"

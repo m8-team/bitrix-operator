@@ -5,7 +5,6 @@ import (
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	"github.com/m8-team/bitrix-operator/internal/workload"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
