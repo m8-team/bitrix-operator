@@ -155,7 +155,7 @@ func clearSiteEvidence(c *bx.BitrixCluster) {
 func siteProof(c *bx.BitrixCluster, identity string, now time.Time) *bx.SiteValidationStatus {
 	proof := c.Status.SiteValidation
 	if proof == nil || proof.Identity != identity || proof.JobUID == "" ||
-		proof.ValidatedAt.IsZero() || proof.ValidatedAt.Time.After(now.Add(time.Minute)) {
+		proof.ValidatedAt.IsZero() || proof.ValidatedAt.After(now.Add(time.Minute)) {
 		c.Status.SiteValidation = nil
 		return nil
 	}
@@ -195,6 +195,22 @@ func siteValidationCompletedAt(job *batchv1.Job) metav1.Time {
 	return job.CreationTimestamp
 }
 
+func (r *BitrixClusterReconciler) removeOldSiteValidationJobs(ctx context.Context, c *bx.BitrixCluster, name string, jobs *batchv1.JobList) (bool, error) {
+	for i := range jobs.Items {
+		j := &jobs.Items[i]
+		if j.Name == name || !controlledJob(c, j) {
+			continue
+		}
+		if j.DeletionTimestamp.IsZero() {
+			if err := r.deleteValidationJob(ctx, j); err != nil {
+				return true, err
+			}
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
 func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision, image string) error {
 	if !meta.IsStatusConditionTrue(c.Status.Conditions, conditionWebReady) {
 		c.Status.SiteValidation = nil
@@ -228,18 +244,14 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 	if err = r.reader().List(ctx, jobs, client.InNamespace(c.Namespace), client.MatchingLabels{workload.OwnerUID: string(c.UID), "app.kubernetes.io/name": "bitrix-sites"}); err != nil {
 		return err
 	}
-	for i := range jobs.Items {
-		j := &jobs.Items[i]
-		if j.Name != name && controlledJob(c, j) {
-			if j.DeletionTimestamp.IsZero() {
-				if err = r.deleteValidationJob(ctx, j); err != nil {
-					return err
-				}
-			}
-			retainSiteEvidence(c, proof, now)
-			// Do not overlap attempts for different runtime identities.
-			return nil
-		}
+	waiting, err := r.removeOldSiteValidationJobs(ctx, c, name, jobs)
+	if err != nil {
+		return err
+	}
+	if waiting {
+		retainSiteEvidence(c, proof, now)
+		// Do not overlap attempts for different runtime identities.
+		return nil
 	}
 	requested := make([]string, 0, len(c.Spec.Sites))
 	for _, s := range c.Spec.Sites {
