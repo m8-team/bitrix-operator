@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"regexp"
 	"slices"
-
-	"k8s.io/apimachinery/pkg/types"
 	"time"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
@@ -18,6 +16,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
