@@ -54,5 +54,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - name: Install integration test render dependencies
+        run: make kustomize
       - name: Test core packages under race detector
         run: go test -race -count=1 -skip TestControllers ./api/... ./internal/...
