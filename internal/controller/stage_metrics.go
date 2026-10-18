@@ -3,6 +3,7 @@ package controller
 import (
 	"time"
 
+	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
@@ -22,8 +23,36 @@ var stageAttempts = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Help:      "Number of stage attempts by result disposition.",
 }, []string{"stage", "outcome"})
 
+// Reconcile outcomes provide an aggregate signal without resource names or
+// unbounded reason/message labels. Stage metrics remain the detail drilldown.
+var reconcileOutcome = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "bitrix_operator",
+	Name:      "reconcile_outcomes_total",
+	Help:      "Completed reconciliations by final result, with fixed label values.",
+}, []string{"result"})
+
 func init() {
-	metrics.Registry.MustRegister(stageDuration, stageAttempts)
+	metrics.Registry.MustRegister(stageDuration, stageAttempts, reconcileOutcome)
+}
+
+func boundedReconcileResult(c *bx.BitrixCluster, err error) string {
+	if err != nil {
+		return "error"
+	}
+	switch c.Status.Phase {
+	case bx.BitrixClusterPhaseReady:
+		return "ready"
+	case bx.BitrixClusterPhaseDegraded:
+		return "degraded"
+	case bx.BitrixClusterPhaseProgressing, bx.BitrixClusterPhasePending:
+		return "progressing"
+	default:
+		return "other"
+	}
+}
+
+func recordReconcileOutcome(c *bx.BitrixCluster, err error) {
+	reconcileOutcome.WithLabelValues(boundedReconcileResult(c, err)).Inc()
 }
 
 func boundedStageName(name string) string {
