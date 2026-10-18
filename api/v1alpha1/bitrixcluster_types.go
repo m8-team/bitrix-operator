@@ -123,7 +123,132 @@ type ReleaseImageSpec struct {
 
 	// Digest pins the image to immutable content. The controller should prefer the
 	// digest over the tag when both are specified.
-	// +kubebuilder:validation:Pattern=`^sha256:[a-fA-F0-9]+$`
+	// +kubebuilder:validation:Pattern=`^sha256:[a-f0-9]{64}/*
+Copyright 2026.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package v1alpha1
+
+import (
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// DatabaseEngine identifies a database engine supported by the operator.
+// +kubebuilder:validation:Enum=MySQL;PostgreSQL
+type DatabaseEngine string
+
+const (
+	DatabaseEngineMySQL      DatabaseEngine = "MySQL"
+	DatabaseEnginePostgreSQL DatabaseEngine = "PostgreSQL"
+)
+
+// StorageType identifies the Kubernetes storage implementation used by a
+// BitrixCluster storage section.
+// +kubebuilder:validation:Enum=PersistentVolumeClaim;EmptyDir
+type StorageType string
+
+const (
+	StorageTypePersistentVolumeClaim StorageType = "PersistentVolumeClaim"
+	StorageTypeEmptyDir              StorageType = "EmptyDir"
+)
+
+// BitrixClusterPhase is a high-level, human-readable cluster phase.
+// Conditions remain the authoritative source for detailed status.
+// +kubebuilder:validation:Enum=Pending;Progressing;Ready;Degraded
+type BitrixClusterPhase string
+
+const (
+	BitrixClusterPhasePending     BitrixClusterPhase = "Pending"
+	BitrixClusterPhaseProgressing BitrixClusterPhase = "Progressing"
+	BitrixClusterPhaseReady       BitrixClusterPhase = "Ready"
+	BitrixClusterPhaseDegraded    BitrixClusterPhase = "Degraded"
+)
+
+// BitrixClusterSpec defines the desired state of BitrixCluster.
+type BitrixClusterSpec struct {
+	// Release defines the immutable application image deployed by the operator.
+	// +required
+	Release ReleaseSpec `json:"release"`
+
+	// License references the Secret key containing the Bitrix license value.
+	// +required
+	License SecretValueSpec `json:"license"`
+
+	// Crypto references the Secret key containing the Bitrix encryption key.
+	// +required
+	Crypto SecretValueSpec `json:"crypto"`
+
+	// Sites maps existing Bitrix site IDs to externally published hosts.
+	// Site existence is validated by the controller against the Bitrix installation.
+	// +kubebuilder:validation:MinItems=1
+	// +listType=map
+	// +listMapKey=id
+	// +required
+	Sites []BitrixSiteSpec `json:"sites"`
+
+	// Runtime configures web, cron, agents, and Push & Pull workloads.
+	// +required
+	Runtime RuntimeSpec `json:"runtime"`
+
+	// Database configures connections rendered into the Bitrix application settings.
+	// +required
+	Database DatabaseSpec `json:"database"`
+
+	// Redis configures the shared Redis endpoint used by cache and sessions.
+	// +required
+	Redis RedisSpec `json:"redis"`
+
+	// Storage configures persistent uploads and temporary runtime storage.
+	// +required
+	Storage StorageSpec `json:"storage"`
+
+	// Networking optionally configures publication through Kubernetes Gateway API.
+	// When omitted, Gateway API resources are not created.
+	// +optional
+	Networking *NetworkingSpec `json:"networking,omitempty"`
+}
+
+// ReleaseSpec defines the application image deployed by the cluster.
+type ReleaseSpec struct {
+	// Image identifies the immutable Bitrix application release.
+	// +required
+	Image ReleaseImageSpec `json:"image"`
+
+	// ImagePullSecrets lists Secrets used to pull the release image.
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+}
+
+// ReleaseImageSpec identifies an image by repository, tag, and optionally digest.
+type ReleaseImageSpec struct {
+	// Repository is the image repository without a tag or digest.
+	// +kubebuilder:validation:MinLength=1
+	// +required
+	Repository string `json:"repository"`
+
+	// Tag is the human-readable release version.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$`
+	// +required
+	Tag string `json:"tag"`
+
+	// Digest pins the image to immutable content. The controller should prefer the
+	// digest over the tag when both are specified.
+	
 	// +optional
 	Digest string `json:"digest,omitempty"`
 
@@ -425,12 +550,12 @@ type RedisCacheSpec struct {
 // RedisSessionsSpec configures Redis-backed PHP sessions.
 type RedisSessionsSpec struct {
 	// Mode configures the Bitrix session storage mode.
-	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Enum=default;separated
 	// +required
 	Mode string `json:"mode"`
 
 	// TTL is the session lifetime in seconds.
-	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Minimum=1
 	// +required
 	TTL int64 `json:"ttl"`
 }
