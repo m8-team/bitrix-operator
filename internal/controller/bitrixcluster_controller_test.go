@@ -170,7 +170,7 @@ var _ = Describe("API server schema and defaults", func() {
 			s["sites"] = append(s["sites"].([]any), map[string]any{"id": "s2", "hosts": []any{first["hosts"].([]any)[0]}})
 		}),
 		Entry("too many site hosts", func(s map[string]any) {
-			hosts := make([]any, 17)
+			hosts := make([]any, 33)
 			for i := range hosts {
 				hosts[i] = fmt.Sprintf("host-%d.example.com", i)
 			}
