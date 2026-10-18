@@ -338,4 +338,3 @@ var _ = Describe("Gateway publication", func() {
 		Expect(foreign.OwnerReferences).To(BeEmpty())
 	})
 })
-
