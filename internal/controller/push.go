@@ -92,8 +92,7 @@ func (r *BitrixClusterReconciler) deletePush(ctx context.Context, c *bx.BitrixCl
 func (r *BitrixClusterReconciler) deletePushObject(ctx context.Context, c *bx.BitrixCluster, obj client.Object, foreground bool) (bool, error) {
 	found, err := r.deleteOwnedResource(ctx, c, obj, foreground)
 	if err != nil {
-		var collision *blocked
-		if errors.As(err, &collision) {
+		if collision, ok := errors.AsType[*blocked](err); ok {
 			condition(c, "PushReady", metav1.ConditionFalse, collision.reason, collision.message)
 		} else {
 			condition(c, "PushReady", metav1.ConditionFalse, "CleanupFailed", "Could not inspect or delete an owned Push resource")
