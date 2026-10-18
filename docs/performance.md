@@ -8,8 +8,13 @@ storage, database, Redis, Gateway or live traffic.
 
 For each size the test creates CRs, waits for the current generation with
 Ready=False / SecretMissing, updates the release tag to bump spec generation,
-then waits for the new generation. The JSON report records completed / pending
-objects, elapsed time and p50/p95/p99 **upper bounds** of observed status times,
+then waits for the new generation. Updates target **explicit CR names created by
+this run**, using eight parallel kubectl patch workers by default
+(`--patch-workers`, 1–16). `kubectl patch -l` is not a supported selector form.
+No other CRs in the cluster are modified. The JSON report retains successful
+phase measurements even if a later phase errors, with a failure phase and
+sanitized error; records completed / pending objects, elapsed time and
+p50/p95/p99 **upper bounds** of observed status times,
 including all API writes and one-second polling intervals. These are not
 per-reconcile duration measurements.
 
