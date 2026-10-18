@@ -67,7 +67,7 @@ healthy resync 10–12 минут (не 30-секундный polling), при �
 SitesValidated. Отключённые Cron/Push удовлетворяют своим Conditions как Disabled.
 Без Gateway `status.sites[].urls` пуст: наличие site ID не означает публичного URL.
 Gateway API, TLS, конфликты hosts между BitrixCluster и публикация URLs — [часть 6.2](gateway-tls.md).
-Admission-валидация CRD отвергает wildcard и IP hosts, заглавные буквы, неверные DNS-1123 метки и совпадения hostname между разными site IDs. Максимум 64 site IDs (каждый до 32 символов) и 16 DNS names на сайт; termination message ограничен 4096 байт. Runtime renderer продолжает независимо проверять те же инварианты.
+Admission-валидация CRD отвергает wildcard и IP hosts, заглавные буквы, неверные DNS-1123 метки и совпадения hostname между разными site IDs. Максимум 64 site IDs (каждый до 32 символов) и 32 DNS names на сайт; termination message ограничен 4096 байт. Runtime renderer продолжает независимо проверять те же инварианты.
 
 ## Проверки и пределы доказательств
 
