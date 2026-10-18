@@ -155,7 +155,7 @@ func clearSiteEvidence(c *bx.BitrixCluster) {
 func siteProof(c *bx.BitrixCluster, identity string, now time.Time) *bx.SiteValidationStatus {
 	proof := c.Status.SiteValidation
 	if proof == nil || proof.Identity != identity || proof.JobUID == "" ||
-		proof.ValidatedAt.IsZero() || proof.ValidatedAt.Time.After(now) {
+		proof.ValidatedAt.IsZero() || proof.ValidatedAt.Time.After(now.Add(time.Minute)) {
 		c.Status.SiteValidation = nil
 		return nil
 	}
@@ -298,9 +298,7 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 	// Keep failed Jobs for five minutes, including failed refresh attempts,
 	// so a transient DB/Bitrix failure is retried without reconciling in a loop.
 	completedAt := siteValidationCompletedAt(job)
-	if result.Reason != sitesValidated && time.Since(completedAt.Time) >= 5*time.Minute {
-		return r.deleteValidationJob(ctx, job)
-	}
+	retryExpired := result.Reason != sitesValidated && time.Since(completedAt.Time) >= 5*time.Minute
 	status := metav1.ConditionFalse
 	message := "The Bitrix kernel could not validate the requested sites; retrying within five minutes"
 	if result.Reason == sitesValidated {
@@ -325,6 +323,9 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 		} else if result.Reason == "SiteNotFound" {
 			site.Message = "Site ID does not exist in the Bitrix kernel"
 		}
+	}
+	if retryExpired {
+		return r.deleteValidationJob(ctx, job)
 	}
 	return nil
 }
