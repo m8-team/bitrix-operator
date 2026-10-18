@@ -22,6 +22,8 @@ CR из cache один раз на scrape, не обращается к Secrets 
 | `bitrix_cluster_replicas` | те же + `component`, `state` | Последние сохранённые счётчики workload |
 | `bitrix_operator_collection_success` | нет | 1 — cache прочитан, 0 — ошибка/таймаут |
 | `bitrix_operator_collection_duration_seconds` | нет | Время сбора snapshot |
+| `bitrix_operator_reconcile_stage_duration_seconds` | `stage`, `outcome` | Histogram длительности каждой стадии reconciliation |
+| `bitrix_operator_reconcile_stage_attempts_total` | `stage`, `outcome` | Число завершений стадий по disposition |
 
 Conditions ограничены восемью типами: Ready, StorageReady, WebReady, CronReady,
 PushReady, SitesValidated, GatewayReady, AutoscalingReady. Отсутствующая condition
@@ -34,7 +36,13 @@ States: `desired`, `ready`, `updated`, `available`. При отсутствии 
 счётчиков нет. Существующие счётчики могут быть устаревшими — проверяйте generation.
 Для HPA desired берётся из наблюдённого Deployment через status.
 
-Не более 42 серий на CR и две серии collector на manager. Нет labels с UID,
+Не более 42 серий на CR и две серии snapshot collector на manager.
+Дополнительные метрики стадий имеют фиксированный список stage
+(`prepare`, `config`, `push`, `web`, `cron`, `web-status`, `sites`,
+`config-gc`, `gateway`, `other`) и outcome (`success`, `Waiting`, `Blocked`,
+`Transient`). Никакие per-CR labels для этих метрик не создаются. Histogram
+помогает обнаружить замедление конкретного этапа, а counter отделяет штатное
+ожидание от постоянной блокировки и временных ошибок. Нет labels с UID,
 Secret values, image tags/digests, hostnames, site IDs, reason/message или error.
 Авторизованные читатели metrics видят имена CR и namespace. `cluster_namespace`
 не конфликтует с target label `namespace` ServiceMonitor.
