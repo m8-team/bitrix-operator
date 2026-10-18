@@ -255,7 +255,9 @@ func (r *BitrixClusterReconciler) siteResult(ctx context.Context, c *bx.BitrixCl
 		return unavailable, false, nil
 	}
 	pods := &corev1.PodList{}
-	if err := r.observationReader().List(ctx, pods, client.InNamespace(c.Namespace), client.MatchingLabels{"batch.kubernetes.io/controller-uid": string(job.UID)}); err != nil {
+	// The completed Job's result is a security-sensitive, one-shot proof.
+	// Read it directly: informer lag must not turn a valid result into a failure.
+	if err := r.reader().List(ctx, pods, client.InNamespace(c.Namespace), client.MatchingLabels{"batch.kubernetes.io/controller-uid": string(job.UID)}); err != nil {
 		return unavailable, false, err
 	}
 	// Exactly one successful attempt; no log scraping or pod/exec permissions.
