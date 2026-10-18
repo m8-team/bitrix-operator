@@ -75,6 +75,15 @@ func certificateSecret(c *bx.BitrixCluster, host string, expires time.Time) *cor
 }
 
 // A failing live reader models temporary Gateway API unavailability.
+type gatewayReadFailureClient struct{ client.Client }
+
+func (r gatewayReadFailureClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if _, ok := obj.(*gateway.Gateway); ok {
+		return errors.New("temporary Gateway observation failure")
+	}
+	return r.Client.Get(ctx, key, obj, opts...)
+}
+
 type gatewayReadFailure struct{ client.Reader }
 
 func (r gatewayReadFailure) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
@@ -156,6 +165,30 @@ var _ = Describe("Gateway publication", func() {
 		Expect(k8sClient.List(ctx, routes, client.InNamespace(c.Namespace))).To(Succeed())
 		Expect(routes.Items).To(BeEmpty())
 		Expect(c.Status.Sites[0].URLs).To(BeEmpty())
+	})
+
+	It("never rolls a healthy Deployment on a failed Gateway observation", func() {
+		c := reconcileWeb(webSample())
+		g := gatewaySample(c)
+		reconcilePublished(c)
+		before := webDeployment(c)
+		hash := before.Spec.Template.Annotations[workload.ConfigHash]
+		revision := before.Spec.Template.Annotations[workload.SecretRevision]
+		failing := &BitrixClusterReconciler{
+			Client: gatewayReadFailureClient{Client: k8sClient},
+			Scheme: k8sClient.Scheme(), GatewayAPIAvailable: true,
+		}
+		_, err := failing.Reconcile(ctx, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(c)})
+		Expect(err).To(HaveOccurred())
+		after := webDeployment(c)
+		Expect(after.Spec.Template.Annotations[workload.ConfigHash]).To(Equal(hash))
+		Expect(after.Spec.Template.Annotations[workload.SecretRevision]).To(Equal(revision))
+		Expect(after.Generation).To(Equal(before.Generation))
+		// An actual listener change, unlike a failed read, is desired runtime.
+		g.Spec.Listeners[0].Port = 8443
+		Expect(k8sClient.Update(ctx, g)).To(Succeed())
+		reconcilePublished(c)
+		Expect(webDeployment(c).Spec.Template.Annotations[workload.ConfigHash]).NotTo(Equal(hash))
 	})
 	It("withdraws routes when a listener no longer matches", func() {
 		c := reconcileWeb(webSample())
@@ -305,3 +338,4 @@ var _ = Describe("Gateway publication", func() {
 		Expect(foreign.OwnerReferences).To(BeEmpty())
 	})
 })
+
