@@ -195,6 +195,10 @@ var _ = Describe("Gateway publication", func() {
 		g := gatewaySample(c)
 		reconcilePublished(c)
 		siteRoute(c)
+		// A previously published URL must not survive the withdrawal of
+		// a route after a same-generation Gateway policy change.
+		c.Status.Sites[0].URLs = []string{"http://portal.example.com"}
+		Expect(k8sClient.Status().Update(ctx, c)).To(Succeed())
 		g.Spec.Listeners[0].Hostname = ptr.To(gateway.Hostname("elsewhere.example.com"))
 		Expect(k8sClient.Update(ctx, g)).To(Succeed())
 		reconcilePublished(c)
@@ -202,6 +206,7 @@ var _ = Describe("Gateway publication", func() {
 		routes := &gateway.HTTPRouteList{}
 		Expect(k8sClient.List(ctx, routes, client.InNamespace(c.Namespace))).To(Succeed())
 		Expect(routes.Items).To(BeEmpty())
+		Expect(c.Status.Sites[0].URLs).To(BeEmpty())
 	})
 	It("checks TLS refs, names, expiry and rotation without rolling application Secrets", func() {
 		c := reconcileWeb(webSample())
