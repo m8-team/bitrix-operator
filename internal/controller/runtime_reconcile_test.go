@@ -13,8 +13,9 @@ func TestRuntimeComponentOrder(t *testing.T) {
 	// The order is an operational contract: policy/ConfigMaps precede Pods,
 	// status observes the newly applied workload, and GC runs last.
 	r := &BitrixClusterReconciler{}
-	got := make([]string, 0)
-	for _, c := range r.runtimeComponents() {
+	components := r.runtimeComponents()
+	got := make([]string, 0, len(components))
+	for _, c := range components {
 		got = append(got, c.Name())
 	}
 	want := []string{"config", "push", "web", "cron", "web-status", "sites", "config-gc"}

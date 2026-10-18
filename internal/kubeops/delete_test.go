@@ -9,7 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -35,7 +34,7 @@ func TestGuardedDeleteWithoutAPIServer(t *testing.T) {
 	}
 	owner := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "parent", Namespace: "default", UID: types.UID("uid-parent")}}
 	ours := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "ours", Namespace: "default", UID: types.UID("uid-ours"),
-		OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "ConfigMap", Name: owner.Name, UID: owner.UID, Controller: ptr.To(true)}}}}
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "v1", Kind: "ConfigMap", Name: owner.Name, UID: owner.UID, Controller: new(true)}}}}
 	other := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "other", Namespace: "default"}}
 	writer := &trackingClient{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(ours, other).Build()}
 	owns := func(o client.Object) bool { return ControlledBy(o, owner, "v1", "ConfigMap") }
@@ -61,7 +60,7 @@ func TestGuardedDeleteWithoutAPIServer(t *testing.T) {
 
 func TestControlledByVerifiesIdentity(t *testing.T) {
 	owner := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{UID: types.UID("owner")}}
-	obj := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{{UID: owner.UID, Kind: "ConfigMap", APIVersion: "v1", Controller: ptr.To(true)}}}}
+	obj := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{OwnerReferences: []metav1.OwnerReference{{UID: owner.UID, Kind: "ConfigMap", APIVersion: "v1", Controller: new(true)}}}}
 	if !ControlledBy(obj, owner, "v1", "ConfigMap") || ControlledBy(obj, owner, "apps/v1", "ConfigMap") || ControlledBy(obj, owner, "v1", "Secret") {
 		t.Fatal("unexpected owner validation result")
 	}
