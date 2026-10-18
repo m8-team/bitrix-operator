@@ -10,6 +10,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+ stagePush = "push"
+ stageWeb = "web"
+ stageCron = "cron"
+ stageWebStatus = "web-status"
+ stageSites = "sites"
+ conditionWebReady = "WebReady"
+ conditionSitesValidated = "SitesValidated"
+)
+
 // runtimeInputs contain reconcile-local dependencies shared across stages.
 // The web observation stage records rollout readiness for downstream GC.
 type runtimeInputs struct {
@@ -110,11 +120,11 @@ func (r *BitrixClusterReconciler) prepareRuntime(ctx context.Context, c *bx.Bitr
 func (r *BitrixClusterReconciler) runtimeComponents() []runtimeComponent {
 	return []runtimeComponent{
 		componentStep{name: "config", run: r.reconcileRuntimeConfig},
-		componentStep{name: "push", run: r.reconcileRuntimePush},
-		componentStep{name: "web", run: r.reconcileRuntimeWeb},
-		componentStep{name: "cron", run: r.reconcileRuntimeCron},
-		componentStep{name: "web-status", run: r.observeRuntimeWeb},
-		componentStep{name: "sites", run: r.reconcileRuntimeSites},
+		componentStep{name: stagePush, run: r.reconcileRuntimePush},
+		componentStep{name: stageWeb, run: r.reconcileRuntimeWeb},
+		componentStep{name: stageCron, run: r.reconcileRuntimeCron},
+		componentStep{name: stageWebStatus, run: r.observeRuntimeWeb},
+		componentStep{name: stageSites, run: r.reconcileRuntimeSites},
 		componentStep{name: "config-gc", run: r.reconcileRuntimeConfigGC},
 	}
 }

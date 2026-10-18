@@ -28,8 +28,8 @@ func initializeReconcileStatus(c *bx.BitrixCluster) {
 		c.Status.Sites = append(c.Status.Sites, bx.BitrixSiteStatus{ID: site.ID, Message: "Site existence has not been validated through the Bitrix kernel"})
 	}
 	condition(c, "Ready", metav1.ConditionFalse, "SiteValidationPending", "Web readiness does not validate Bitrix site IDs; kernel validation is pending")
-	condition(c, "SitesValidated", metav1.ConditionUnknown, "ValidationPending", "Waiting for site validation of the current runtime")
-	condition(c, "WebReady", metav1.ConditionFalse, "RolloutPending", "Waiting for the desired web rollout")
+	condition(c, conditionSitesValidated, metav1.ConditionUnknown, "ValidationPending", "Waiting for site validation of the current runtime")
+	condition(c, conditionWebReady, metav1.ConditionFalse, "RolloutPending", "Waiting for the desired web rollout")
 	condition(c, "CronReady", metav1.ConditionTrue, "Disabled", "Cron workload is disabled")
 	if c.Spec.Runtime.Cron.Enabled {
 		c.Status.Runtime.Cron.DesiredReplicas = 1
@@ -88,7 +88,7 @@ func resolveReconcileResult(c *bx.BitrixCluster, resourceErr, gatewayErr error) 
 // validation error is not evidence that an observed web rollout stopped.
 func attributeComponentFailure(c *bx.BitrixCluster, err error, issue reconcileFailure) {
 	stage := ""
-	for _, name := range []string{"push", "web", "cron", "web-status", "sites"} {
+	for _, name := range []string{stagePush, stageWeb, stageCron, stageWebStatus, stageSites} {
 		if failedComponent(err, name) {
 			stage = name
 			break
@@ -96,24 +96,38 @@ func attributeComponentFailure(c *bx.BitrixCluster, err error, issue reconcileFa
 	}
 	kind := ""
 	switch stage {
-	case "push":
+	case stagePush:
 		kind = "PushReady"
-	case "web":
-		kind = "WebReady"
-	case "cron":
+	case stageWeb:
+		kind = conditionWebReady
+	case stageCron:
 		kind = "CronReady"
-	case "sites":
-		kind = "SitesValidated"
-	case "web-status":
-		kind = "WebReady"
-		if meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") && workload.AutoscalingEnabled(c) {
+	case stageSites:
+		kind = conditionSitesValidated
+	case stageWebStatus:
+		kind = conditionWebReady
+		if meta.IsStatusConditionTrue(c.Status.Conditions, conditionWebReady) && workload.AutoscalingEnabled(c) {
 			kind = "AutoscalingReady"
+		}
+	}
+	if kind == "" && failedComponent(err, "prepare") {
+		// Preparation also performs safe disabling before validating Secrets.
+		// Report a stopping controller even when the desired spec disables it.
+		switch issue.reason {
+		case "PushStopping":
+			kind = "PushReady"
+		case "CronStopping":
+			kind = "CronReady"
+		case "SecretKeyInvalid":
+			if pushEnabled(c) {
+				kind = "PushReady"
+			}
 		}
 	}
 	if kind == "" {
 		return
 	}
-	if existing := meta.FindStatusCondition(c.Status.Conditions, kind); existing != nil && existing.Status == metav1.ConditionTrue {
+	if existing := meta.FindStatusCondition(c.Status.Conditions, kind); existing != nil && existing.Status == metav1.ConditionTrue && !failedComponent(err, "prepare") {
 		return
 	}
 	condition(c, kind, metav1.ConditionFalse, issue.reason, issue.message)

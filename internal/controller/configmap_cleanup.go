@@ -18,7 +18,7 @@ import (
 // managedConfigMapName restricts collection to versioned runtime configuration.
 // Other ConfigMaps are never eligible, even when they carry the cluster labels.
 func managedConfigMapName(c *bx.BitrixCluster, name string) bool {
-	for _, kind := range []string{"nginx", "php", "push"} {
+	for _, kind := range []string{"nginx", "php", stagePush} {
 		prefix := workload.Name(c, kind+"-")
 		if !strings.HasPrefix(name, prefix) {
 			continue
