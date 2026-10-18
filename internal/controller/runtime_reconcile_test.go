@@ -5,7 +5,6 @@ import (
 	"errors"
 	"slices"
 	"testing"
-	"time"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -94,8 +93,8 @@ func TestRuntimeComponentsAggregateResultsOnPartialFailure(t *testing.T) {
 		t.Fatalf("lost observations after an error: %+v", c.Status.Conditions)
 	}
 	result, returnedErr := resolveReconcileResult(c, err, nil)
-	if returnedErr != nil || result.RequeueAfter != 30*time.Second {
-		t.Fatalf("unexpected GC error policy: result=%+v err=%v", result, returnedErr)
+	if !errors.Is(returnedErr, failed) || result.RequeueAfter != 0 {
+		t.Fatalf("GC API errors must use the rate-limited queue: result=%+v err=%v", result, returnedErr)
 	}
 	if !meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") ||
 		meta.IsStatusConditionTrue(c.Status.Conditions, "Ready") ||
