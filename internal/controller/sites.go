@@ -274,7 +274,7 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 		if now.Sub(proof.ValidatedAt.Time) < siteValidationTTL {
 			// The status proof survives loss of the completed Pod and manager restarts.
 			// Only the controller can write the status subresource.
-			condition(c, conditionSitesValidated, metav1.ConditionTrue, sitesValidated, "All requested site IDs were validated for the current runtime")
+			condition(c, conditionSitesValidated, metav1.ConditionTrue, sitesValidated, "All requested site IDs exist in the Bitrix kernel")
 			return nil
 		}
 		// Force the current runtime to be revalidated after TTL. A foreground
