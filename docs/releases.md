@@ -50,7 +50,7 @@ log; identity содержит repository/workflow/tag, даже для private 
 ## Запуск релиза
 
 После merge и успешного завершения всех main workflows maintainer создаёт новый
-тег `vMAJOR.MINOR.PATCH` или `vMAJOR.MINOR.PATCH-rc.N` на **текущем main HEAD**.
+тег `vMAJOR.MINOR.PATCH` или `vMAJOR.MINOR.PATCH-rc.N` на commit из истории main с завершённым обязательным CI для **этого точного SHA**.
 Например, первый тестовый release может быть `v0.1.0-rc.1`; документация не означает,
 что этот тег уже существует или опубликован.
 
@@ -58,7 +58,11 @@ Release policy требует для точного SHA успешный пос�
 workflow: Tests, Lint, Runtime, Web, Network, Observability, Recovery,
 Install artifacts и Release images. PR results другого SHA, старый успешный run
 перед новым failed run, skipped/cancelled/in-progress не принимаются.
-Создание тега до завершения main CI даст отказ; после успешного main CI можно
+Тег на несмердженный SHA или переписанную историю main отклоняется. Продвижение main
+новым merge после создания RC не инвалидирует уже проверенный SHA: во время publish
+проверяются его ancestry и полный успешный main CI на нём; сканирование образов
+повторяется в текущем release run. Создание тега до завершения main CI даст отказ;
+после успешного main CI можно
 повторить failed tag run. Уже существующий GitHub release не перезаписывается.
 
 После native build/scan и environment gate публикация:
