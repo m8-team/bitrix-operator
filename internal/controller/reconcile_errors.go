@@ -19,7 +19,7 @@ const (
 
 type waiting struct {
 	reason, message string
-	retryAfter       time.Duration
+	retryAfter      time.Duration
 }
 
 func (w *waiting) Error() string { return w.message }
