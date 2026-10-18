@@ -33,6 +33,7 @@ func initializeReconcileStatus(c *bx.BitrixCluster) {
 	c.Status.ObservedGeneration = c.Generation
 	c.Status.Phase = bx.BitrixClusterPhaseProgressing
 	c.Status.Release = nil
+	c.Status.SiteValidation = nil
 	c.Status.Runtime = &bx.RuntimeStatus{Web: bx.WorkloadStatus{DesiredReplicas: c.Spec.Runtime.Web.Replicas}}
 	c.Status.Sites = nil
 	for _, site := range c.Spec.Sites {
@@ -103,6 +104,18 @@ func resolveReconcileResult(c *bx.BitrixCluster, resourceErr, gatewayErr error) 
 	retry := pendingRequeueAfter
 	if resourceErr == nil && gatewayErr == nil && meta.IsStatusConditionTrue(c.Status.Conditions, "Ready") {
 		retry = healthyRequeueInterval(c)
+		if proof := c.Status.SiteValidation; proof != nil {
+			// Wake up at the proof TTL, not as much as 12 minutes afterwards.
+			// During refresh also honor the maximum staleness deadline.
+			now := time.Now()
+			next := proof.ValidatedAt.Add(siteValidationTTL)
+			if !now.Before(next) {
+				next = proof.ValidatedAt.Add(siteValidationMaxStaleness)
+			}
+			if next.After(now) && next.Sub(now) < retry {
+				retry = next.Sub(now)
+			}
+		}
 	}
 	if resourceErr != nil {
 		retry = runtimeIssue.retryAfter
