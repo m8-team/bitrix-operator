@@ -36,7 +36,7 @@ States: `desired`, `ready`, `updated`, `available`. При отсутствии 
 счётчиков нет. Существующие счётчики могут быть устаревшими — проверяйте generation.
 Для HPA desired берётся из наблюдённого Deployment через status.
 
-Не более 42 серий на CR и две серии snapshot collector на manager.
+Не более 43 серий на CR (включая timestamp успешной проверки, если он есть) и четыре серии snapshot collector на manager (включая длительность сбора).
 Дополнительные метрики стадий имеют фиксированный список stage
 (`prepare`, `config`, `push`, `web`, `cron`, `web-status`, `sites`,
 `config-gc`, `gateway`, `other`) и outcome (`success`, `Waiting`, `Blocked`,
@@ -128,3 +128,17 @@ status и отправкой может потерять Event; это не audi
 Источники: [Prometheus exporters](https://prometheus.io/docs/instrumenting/writing_exporters/),
 [Kubebuilder metrics](https://book.kubebuilder.io/reference/metrics),
 [controller-runtime recorder](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/recorder).
+
+## OBS-01 — расширенная диагностика при масштабировании
+
+Дополнительно экспортируются:
+- `bitrix_operator_reconcile_outcomes_total{result}`: завершения полного reconcile, только фиксированные result = ready/degraded/progressing/error/other (без имён CR/Secrets и текста ошибок). Счётчик публикуется активным manager.
+- `bitrix_operator_collection_clusters` и `bitrix_operator_collection_unready_clusters`: число активных CR и CR без подтверждённого Ready текущей generation **на каждый экземпляр manager**. Для глобального количества используйте `max`, а не `sum` (followers тоже выполняют scrape).
+- `bitrix_cluster_site_validation_last_success_timestamp_seconds{cluster_namespace,cluster}`: Unix-время последней **сохранённой успешной** проверки, включая уже устаревший результат. Для возраста используйте `time() - metric`; отсутствие серии означает отсутствие подтверждённой проверки, а не возраст 0. Поля identity, Job UID и сообщения не экспортируются.
+
+Новые dashboard panels: p95 времени reconciliation-стадий, распределение итогов,
+число CR в cache, возраст успешной проверки сайтов. Промежуточные метрики
+остаются без per-CR labels, что позволяет видеть нагрузку 10/100/1000 CR
+без добавления чувствительных high-cardinality лейблов. При ошибке cache read
+новые числовые summary-серии отсутствуют — не подменяйте это нулевой нагрузкой.
+См. [PERF-01](performance.md) для воспроизводимого нагрузочного профиля.

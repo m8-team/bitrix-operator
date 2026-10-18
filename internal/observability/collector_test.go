@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus"
@@ -120,5 +121,43 @@ func TestCollectionFailure(t *testing.T) {
 bitrix_operator_collection_success 0
 `), "bitrix_operator_collection_success", "bitrix_cluster_condition"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestExtendedDiagnosticsAndSensitiveData(t *testing.T) {
+	ready := sampleCluster()
+	ready.Status.SiteValidation = &bx.SiteValidationStatus{
+		Identity: "secret-image-digest", JobUID: "secret-job-uid",
+		ValidatedAt: metav1.NewTime(time.Unix(1234567890, 0)),
+	}
+	degraded := sampleCluster()
+	degraded.Name = "broken"
+	degraded.Status.Conditions = nil
+	degraded.Status.SiteValidation = nil
+	collector := NewCollector(testClient(t, ready, degraded))
+	registry := prometheus.NewPedanticRegistry()
+	registry.MustRegister(collector)
+	families, err := registry.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	metrics := map[string]float64{}
+	for _, family := range families {
+		if strings.Contains(family.String(), "secret-image-digest") || strings.Contains(family.String(), "secret-job-uid") {
+			t.Fatal("sensitive validation proof escaped into metrics")
+		}
+		if family.GetName() == "bitrix_operator_collection_clusters" ||
+			family.GetName() == "bitrix_operator_collection_unready_clusters" {
+			metrics[family.GetName()] = family.Metric[0].Gauge.GetValue()
+		}
+		if family.GetName() == "bitrix_cluster_site_validation_last_success_timestamp_seconds" {
+			if len(family.Metric) != 1 || family.Metric[0].Gauge.GetValue() != 1234567890 {
+				t.Fatalf("unexpected site validation timestamp series: %v", family.Metric)
+			}
+		}
+	}
+	if metrics["bitrix_operator_collection_clusters"] != 2 ||
+		metrics["bitrix_operator_collection_unready_clusters"] != 1 {
+		t.Fatalf("wrong collection diagnostics: %v", metrics)
 	}
 }

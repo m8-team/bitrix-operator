@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
@@ -44,5 +45,31 @@ func TestStageMetricDispositions(t *testing.T) {
 				t.Fatalf("stage attempts = %v; want %v", got, before+1)
 			}
 		})
+	}
+}
+
+func TestReconcileOutcomeBoundedAndCounted(t *testing.T) {
+	for _, test := range []struct {
+		phase bx.BitrixClusterPhase
+		err   error
+		want  string
+	}{
+		{bx.BitrixClusterPhaseReady, nil, "ready"},
+		{bx.BitrixClusterPhaseDegraded, nil, "degraded"},
+		{bx.BitrixClusterPhaseProgressing, nil, "progressing"},
+		{bx.BitrixClusterPhasePending, nil, "progressing"},
+		{bx.BitrixClusterPhaseReady, errors.New("sensitive customer error"), "error"},
+		{"unexpected-tenant-secret", nil, "other"},
+	} {
+		cluster := &bx.BitrixCluster{Status: bx.BitrixClusterStatus{Phase: test.phase}}
+		if got := boundedReconcileResult(cluster, test.err); got != test.want {
+			t.Fatalf("result=%q, expected %q", got, test.want)
+		}
+		counter := reconcileOutcome.WithLabelValues(test.want)
+		before := testutil.ToFloat64(counter)
+		recordReconcileOutcome(cluster, test.err)
+		if got := testutil.ToFloat64(counter); got != before+1 {
+			t.Fatalf("count=%v, expected %v", got, before+1)
+		}
 	}
 }

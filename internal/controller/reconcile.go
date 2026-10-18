@@ -31,7 +31,9 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	result, err := resolveReconcileResult(cluster, resourceErr, publicationErr)
 	preserveConditionTransitions(before, cluster)
 	if patchErr := r.persistReconcileStatus(ctx, before, cluster); patchErr != nil {
+		recordReconcileOutcome(cluster, patchErr)
 		return ctrl.Result{}, patchErr
 	}
+	recordReconcileOutcome(cluster, err)
 	return result, err
 }

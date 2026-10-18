@@ -83,3 +83,17 @@ Security review и opt-in NetworkPolicy profiles описаны в [security.md]
 [Recovery runbook и logical restore drill](recovery.md) добавлены в 7.4.3a.
 Production CSI/DB backup backend, целевые RPO/RTO и восстановление настоящего Bitrix
 остаются gate 7.4.3b.
+
+## Массовая очередь и site-validation freshness (OBS-01)
+
+Сравните p95 стадий reconciliation с числом CR без Ready и общей глубиной очереди:
+`bitrix_operator_collection_clusters`, `bitrix_operator_collection_unready_clusters`,
+`bitrix_operator_reconcile_outcomes_total` и
+`bitrix_operator_reconcile_stage_duration_seconds_bucket`. Пустой cache
+при `collection_success=0` означает отказ collector, не отсутствие CR.
+
+Если возраст последнего успеха `time() - bitrix_cluster_site_validation_last_success_timestamp_seconds`
+превысил TTL 15 минут, проверьте Job sites, Pod termination message, image digests
+и очередь reconcile. После 30 минут без нового успеха SitesValidated должен
+стать Unknown/ValidationStale, если controller продолжает работать. Для CR
+без подтверждённого результата timestamp-серии нет — смотрите condition.
