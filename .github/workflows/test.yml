@@ -26,6 +26,7 @@ jobs:
           go-version-file: go.mod
       - name: Formatting, module integrity and unchanged API contract
         run: |
+          gofmt -l api cmd internal test
           test -z "$(gofmt -l api cmd internal test)"
           go mod verify
           go mod tidy

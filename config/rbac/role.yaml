@@ -8,7 +8,7 @@ rules:
   - ""
   resources:
   - configmaps
-  - persistentvolumeclaims
+  - services
   verbs:
   - create
   - delete
@@ -29,10 +29,9 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - services
+  - persistentvolumeclaims
   verbs:
   - create
-  - delete
   - get
   - list
   - patch
