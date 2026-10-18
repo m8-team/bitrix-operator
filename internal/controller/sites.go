@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	sitesValidated = "Validated"
-	siteValidationTTL = 15 * time.Minute
+	sitesValidated             = "Validated"
+	siteValidationTTL          = 15 * time.Minute
 	siteValidationMaxStaleness = 30 * time.Minute
 )
 
@@ -305,8 +305,8 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 		status = metav1.ConditionTrue
 		message = "All requested site IDs exist in the Bitrix kernel"
 		c.Status.SiteValidation = &bx.SiteValidationStatus{
-			Identity: name,
-			JobUID: string(job.UID),
+			Identity:    name,
+			JobUID:      string(job.UID),
 			ValidatedAt: completedAt,
 		}
 	}
