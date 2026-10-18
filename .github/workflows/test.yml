@@ -26,7 +26,7 @@ jobs:
           go-version-file: go.mod
       - name: Formatting, module integrity and unchanged API contract
         run: |
-          diff="$(gofmt -d api cmd internal test)"
+          diff="$(gofmt -d api cmd internal test 2>&1 || true)"
           if [ -n "$diff" ]; then
             printf '%s\n' "$diff"
             exit 1
