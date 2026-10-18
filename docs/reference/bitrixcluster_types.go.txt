@@ -564,6 +564,11 @@ type BitrixClusterStatus struct {
 	// +optional
 	Sites []BitrixSiteStatus `json:"sites,omitempty"`
 
+	// SiteValidation is the latest successful, identity-bound validation proof.
+	// It remains available during background refresh, even after the old Job is deleted.
+	// +optional
+	SiteValidation *SiteValidationStatus `json:"siteValidation,omitempty"`
+
 	// Runtime contains rollout status for generated workloads.
 	// +optional
 	Runtime *RuntimeStatus `json:"runtime,omitempty"`
@@ -573,6 +578,22 @@ type BitrixClusterStatus struct {
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// SiteValidationStatus records bounded freshness independently of the validation Job Pod.
+// A current successful result is bound to the current runtime identity and Job UID.
+type SiteValidationStatus struct {
+	// Identity is the deterministic validation Job name for the observed runtime.
+	// +required
+	Identity string `json:"identity"`
+
+	// JobUID identifies the successful Job attempt.
+	// +required
+	JobUID string `json:"jobUID"`
+
+	// ValidatedAt is the successful Job completion time used for TTL and staleness.
+	// +required
+	ValidatedAt metav1.Time `json:"validatedAt"`
 }
 
 // ReleaseStatus identifies the release image observed by the controller.
