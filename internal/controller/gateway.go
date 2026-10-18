@@ -20,7 +20,11 @@ const gatewayKind = "Gateway"
 // Gateway failures affect publication only; existing internal workloads still reconcile.
 func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.BitrixCluster, runtimeValid bool) error {
 	if !gatewayEnabled(c) {
-		return r.pruneRoutes(ctx, c, nil)
+		if err := r.pruneRoutes(ctx, c, nil); err != nil {
+			return err
+		}
+		clearPublishedSiteURLs(c)
+		return nil
 	}
 	if !runtimeValid {
 		// Preserve last-known-good routes during reconciliation failures.
@@ -41,6 +45,7 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 			if cleanupErr := r.pruneRoutes(ctx, c, nil); cleanupErr != nil {
 				return &gatewayCleanupError{reason: issue.reason, message: issue.message, cause: cleanupErr}
 			}
+			clearPublishedSiteURLs(c)
 			return err
 		}
 		// A transient API/transport error must not delete last-known-good routes.
@@ -92,6 +97,15 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 		}
 	}
 	return nil
+}
+
+// clearPublishedSiteURLs removes stale public URL evidence only after the
+// corresponding routes were successfully withdrawn. Transient Gateway
+// failures retain last-known-good routes and URLs.
+func clearPublishedSiteURLs(c *bx.BitrixCluster) {
+	for i := range c.Status.Sites {
+		c.Status.Sites[i].URLs = nil
+	}
 }
 
 func desiredRoutes(c *bx.BitrixCluster) []*gateway.HTTPRoute {
