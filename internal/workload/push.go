@@ -42,14 +42,7 @@ func PushDeployment(c *bx.BitrixCluster, b *render.Bundle, revision, role string
 	if role == pushPublisher {
 		replicas = c.Spec.Runtime.Push.Publisher.Replicas
 	}
-	projected := core.ProjectedVolumeSource().WithDefaultMode(0440)
-	for _, p := range b.PushSecrets {
-		secret := core.SecretProjection().WithName(p.Secret.Name).WithOptional(false)
-		for _, item := range p.Secret.Items {
-			secret.WithItems(core.KeyToPath().WithKey(item.Key).WithPath(item.Path).WithMode(*item.Mode))
-		}
-		projected.WithSources(core.VolumeProjection().WithSecret(secret))
-	}
+	projected := projectedSecrets(b.PushSecrets)
 	probe := func(mode string) *core.ProbeApplyConfiguration {
 		return core.Probe().WithExec(core.ExecAction().WithCommand("node", "/run/push-config/health.cjs", mode)).WithTimeoutSeconds(3).WithPeriodSeconds(5).WithFailureThreshold(3)
 	}
