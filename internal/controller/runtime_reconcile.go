@@ -18,6 +18,8 @@ const (
 	stageSites              = "sites"
 	conditionWebReady       = "WebReady"
 	conditionSitesValidated = "SitesValidated"
+	conditionPushReady      = "PushReady"
+	conditionCronReady      = "CronReady"
 )
 
 // runtimeInputs contain reconcile-local dependencies shared across stages.

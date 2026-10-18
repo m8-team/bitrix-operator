@@ -30,10 +30,10 @@ func initializeReconcileStatus(c *bx.BitrixCluster) {
 	condition(c, "Ready", metav1.ConditionFalse, "SiteValidationPending", "Web readiness does not validate Bitrix site IDs; kernel validation is pending")
 	condition(c, conditionSitesValidated, metav1.ConditionUnknown, "ValidationPending", "Waiting for site validation of the current runtime")
 	condition(c, conditionWebReady, metav1.ConditionFalse, "RolloutPending", "Waiting for the desired web rollout")
-	condition(c, "CronReady", metav1.ConditionTrue, "Disabled", "Cron workload is disabled")
+	condition(c, conditionCronReady, metav1.ConditionTrue, "Disabled", "Cron workload is disabled")
 	if c.Spec.Runtime.Cron.Enabled {
 		c.Status.Runtime.Cron.DesiredReplicas = 1
-		condition(c, "CronReady", metav1.ConditionFalse, "RolloutPending", "Waiting for the desired cron rollout")
+		condition(c, conditionCronReady, metav1.ConditionFalse, "RolloutPending", "Waiting for the desired cron rollout")
 	}
 	condition(c, "AutoscalingReady", metav1.ConditionTrue, "Disabled", "Web autoscaling is disabled")
 	if workload.AutoscalingEnabled(c) {
@@ -97,11 +97,11 @@ func attributeComponentFailure(c *bx.BitrixCluster, err error, issue reconcileFa
 	kind := ""
 	switch stage {
 	case stagePush:
-		kind = "PushReady"
+		kind = conditionPushReady
 	case stageWeb:
 		kind = conditionWebReady
 	case stageCron:
-		kind = "CronReady"
+		kind = conditionCronReady
 	case stageSites:
 		kind = conditionSitesValidated
 	case stageWebStatus:
@@ -115,12 +115,12 @@ func attributeComponentFailure(c *bx.BitrixCluster, err error, issue reconcileFa
 		// Report a stopping controller even when the desired spec disables it.
 		switch issue.reason {
 		case "PushStopping":
-			kind = "PushReady"
+			kind = conditionPushReady
 		case "CronStopping":
-			kind = "CronReady"
+			kind = conditionCronReady
 		case "SecretKeyInvalid":
 			if pushEnabled(c) {
-				kind = "PushReady"
+				kind = conditionPushReady
 			}
 		}
 	}
