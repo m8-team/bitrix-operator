@@ -10,14 +10,35 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// runtimeInputs contain reconcile-local dependencies shared across stages.
-// The web observation stage records rollout readiness for downstream GC.
-type runtimeInputs struct {
+const (
+	stagePush               = "push"
+	stageWeb                = "web"
+	stageCron               = "cron"
+	stageWebStatus          = "web-status"
+	stageSites              = "sites"
+	conditionWebReady       = "WebReady"
+	conditionSitesValidated = "SitesValidated"
+	conditionPushReady      = "PushReady"
+	conditionCronReady      = "CronReady"
+)
+
+// runtimeDesiredState describes the configuration we intend to apply. It is
+// prepared once and never updated by any reconciliation stage.
+type runtimeDesiredState struct {
 	bundle   *render.Bundle
 	revision string
 	image    string
-	pvcBound bool
-	webReady bool
+}
+
+// runtimeObservedState is a snapshot of dependencies read from the API. Runtime
+// rollout observations are reported via ComponentResult, not mutable inputs.
+type runtimeObservedState struct {
+	storageBound bool
+}
+
+type runtimeInputs struct {
+	desired  runtimeDesiredState
+	observed runtimeObservedState
 }
 
 // runtimeComponent is the narrow interface for one independently testable
@@ -104,17 +125,20 @@ func (r *BitrixClusterReconciler) prepareRuntime(ctx context.Context, c *bx.Bitr
 	if bound {
 		condition(c, "StorageReady", metav1.ConditionTrue, "VolumeBound", "Uploads PVC is bound")
 	}
-	return &runtimeInputs{bundle: bundle, revision: revision, image: image, pvcBound: bound}, nil
+	return &runtimeInputs{
+		desired:  runtimeDesiredState{bundle: bundle, revision: revision, image: image},
+		observed: runtimeObservedState{storageBound: bound},
+	}, nil
 }
 
 func (r *BitrixClusterReconciler) runtimeComponents() []runtimeComponent {
 	return []runtimeComponent{
 		componentStep{name: "config", run: r.reconcileRuntimeConfig},
-		componentStep{name: "push", run: r.reconcileRuntimePush},
-		componentStep{name: "web", run: r.reconcileRuntimeWeb},
-		componentStep{name: "cron", run: r.reconcileRuntimeCron},
-		componentStep{name: "web-status", run: r.observeRuntimeWeb},
-		componentStep{name: "sites", run: r.reconcileRuntimeSites},
+		componentStep{name: stagePush, run: r.reconcileRuntimePush},
+		componentStep{name: stageWeb, run: r.reconcileRuntimeWeb},
+		componentStep{name: stageCron, run: r.reconcileRuntimeCron},
+		componentStep{name: stageWebStatus, run: r.observeRuntimeWeb},
+		componentStep{name: stageSites, run: r.reconcileRuntimeSites},
 		componentStep{name: "config-gc", run: r.reconcileRuntimeConfigGC},
 	}
 }

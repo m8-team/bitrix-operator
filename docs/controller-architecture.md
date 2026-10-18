@@ -107,3 +107,36 @@ A component's Conditions are evidence, not a substitute for `Ready`; global
 health may be degraded while a previously observed Web Deployment remains
 ready. Regression tests cover GC failure, site-validation failure, Gateway
 failure, cancellation, snapshot isolation, and retry dispositions.
+
+## P2: desired, applied, observed and periodic reconciliation
+
+The reconciliation state has three distinct meanings:
+
+- **Desired** is the rendered runtime specification (`runtimeDesiredState`):
+  immutable bundle, image reference and Secret revision prepared once.
+- **Applied** is each `ComponentResult.Applied` stage outcome: a successful
+  declarative reconcile or no-op. It must not be interpreted as a successful
+  Deployment rollout, running PHP process or validated site.
+- **Observed** consists of the PVC binding snapshot (`runtimeObservedState`)
+  plus rollout counters, actual image digests and Conditions captured in
+  `ComponentResult` and aggregated into the CR status.
+
+The inputs are never used as a pipeline scratchpad. In particular,
+`runtimeInputs.webReady` has been removed; ConfigMap GC relies on the
+`WebReady=True` Condition actually recorded by the Web observation stage
+together with bound storage. Stage ordering therefore follows explicit
+observed status rather than an implicit mutable boolean.
+
+**Periodic resync**: Pending clusters retain a 30-second safety poll, user
+configuration blocks retain their existing retry policy, and transient
+Kubernetes API errors use the workqueue's rate limiter. Fully Ready clusters
+resync at 10 minutes plus a deterministic 0–119 second UID-based spread.
+Watches on BitrixCluster, owned workloads, Secrets, storage and Gateway
+dependencies still trigger immediate reconciliation; periodic resync is a
+bounded safety net for missed changes, not a replacement for watches.
+
+Partial failures and restarts are not resumable transactions. Reconcile
+always regenerates desired state from the CR and the actual Kubernetes
+objects. Successful prior applies are idempotent, and a retry may resume
+after fixing a foreign-object collision or recreating a required dependency,
+without re-creating retained PVCs or adopting unrelated objects.
