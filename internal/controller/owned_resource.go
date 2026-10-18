@@ -4,7 +4,7 @@ import (
 	"context"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
-		metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
