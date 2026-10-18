@@ -8,6 +8,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gateway "sigs.k8s.io/gateway-api/apis/v1"
 )
 
@@ -45,5 +47,20 @@ var _ = Describe("Indexed Gateway event fanout", func() {
 		Expect(nsRequests).To(ConsistOf(ctrl.Request{NamespacedName: client.ObjectKeyFromObject(beta)}))
 		unknown := &gateway.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "unknown-class"}}
 		Expect(r.gatewayRequests(ctx, unknown)).To(BeEmpty())
+	})
+})
+
+var _ = Describe("Gateway sibling enqueue predicate", func() {
+	It("ignores status-only updates while preserving spec changes and removals", func() {
+		filter := predicate.GenerationChangedPredicate{}
+		old := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Namespace: "tenant-a", Name: "one", Generation: 3}}
+		status := old.DeepCopy()
+		status.Status.Phase = bx.BitrixClusterPhaseDegraded
+		Expect(filter.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: status})).To(BeFalse())
+		modified := old.DeepCopy()
+		modified.Generation = 4
+		Expect(filter.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: modified})).To(BeTrue())
+		Expect(filter.Create(event.CreateEvent{Object: modified})).To(BeTrue())
+		Expect(filter.Delete(event.DeleteEvent{Object: old})).To(BeTrue())
 	})
 })
