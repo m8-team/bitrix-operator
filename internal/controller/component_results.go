@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"time"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -34,7 +35,9 @@ type ComponentResult struct {
 // directly without changing orchestration or their Kubernetes operations.
 func captureComponentResult(name string, cluster *bx.BitrixCluster, reconcile func(*bx.BitrixCluster) error) (ComponentResult, error) {
 	snapshot := cluster.DeepCopy()
+	start := time.Now()
 	err := reconcile(snapshot)
+	recordStageMetrics(name, err, time.Since(start))
 	result := ComponentResult{Name: name, Applied: err == nil}
 	for _, after := range snapshot.Status.Conditions {
 		before := meta.FindStatusCondition(cluster.Status.Conditions, after.Type)
