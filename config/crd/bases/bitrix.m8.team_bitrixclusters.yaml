@@ -751,7 +751,8 @@ spec:
                 x-kubernetes-list-type: map
                 x-kubernetes-validations:
                 - message: hostnames must be unique across sites
-                  rule: self.all(s, self.all(other, s.id == other.id || !s.hosts.exists(h, h in other.hosts)))
+                  rule: self.all(s, self.all(other, s.id == other.id || !s.hosts.exists(h,
+                    h in other.hosts)))
               storage:
                 description: Storage configures persistent uploads and temporary runtime
                   storage.
