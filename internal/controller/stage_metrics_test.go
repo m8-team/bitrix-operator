@@ -3,10 +3,9 @@ package controller
 import (
 	"errors"
 	"testing"
-
-	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	"time"
 
+	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
