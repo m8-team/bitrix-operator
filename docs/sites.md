@@ -52,16 +52,35 @@ identity. Старый результат после изменения generati
 | ResultTooLarge | Ответ со всеми IDs не поместится в termination message |
 
 Успешная проверка привязана к generation, hash конфигурации, ревизии Secrets,
-resolved release/PHP digests и UID Job. Завершённый успешный Job не удаляется
-по таймеру: каждые 15 минут перепроверки сейчас **нет**. Внешнее изменение
-SiteTable при неизменном runtime не инициирует новую validation. Отдельная
-freshness/TTL policy ещё не реализована. Неуспех повторяется через 5 минут
-после завершения Job. Reconcile работает по watches и использует резервный
-healthy resync 10–12 минут (не 30-секундный polling), при ожидании — 30 секунд.
-Старые Jobs удаляются foreground с UID/resourceVersion preconditions перед
-новым запуском. При переходе identity подтверждение старого Job не переносится
-на новый runtime; исправный подтверждённый результат не сбрасывается на
-каждом периодическом reconcile.
+resolved release/PHP digests и UID Job. Контроллер сохраняет в
+`status.siteValidation` identity Job, его UID и `validatedAt` (время завершения
+успешной проверки). Это подтверждение переживает рестарт manager и исчезновение
+завершённого Pod; оно не переиспользуется при смене runtime identity.
+
+**Freshness policy:** успешная проверка действительна 15 минут. По истечении TTL
+оператор foreground-удаляет завершённый Job и создаёт новый с тем же
+детерминированным именем, но новым UID. Во время обычного refresh он сохраняет
+`SitesValidated=True` и предыдущие `status.sites[].exists`, **только если**
+результат проверен для текущего runtime и моложе 30 минут. Ошибка новой проверки
+сразу устанавливает `SitesValidated=False`; если подтверждение старше 30 минут,
+ожидание новой проверки устанавливает `SitesValidated=Unknown/ValidationStale`
+и снимает флаги exists. Идентичность и время проверяются при каждом reconcile.
+Неуспешный Job повторяется после пяти минут.
+
+При исправно работающем controller-runtime следующий reconcile запускается к
+границе 15-минутного TTL (а не только по резервному ресинку 10–12 минут).
+У validation Job есть deadline 120 секунд, поэтому обычное изменение SiteTable
+обнаруживается примерно за 15–18 минут. Это эксплуатационная цель, а не гарантия
+при сбоях API, длительной очереди или недоступности DB. Допустимое сохранение
+предыдущего True ограничено 30 минутами от `validatedAt`; при сбое reconcile
+этот срок не может быть гарантирован без нового запуска controller.
+
+При изменении generation, Secrets или digest новая identity сразу сбрасывает
+предыдущее доказательство и ждёт новый validation Job. Старые Jobs удаляются
+foreground с UID/resourceVersion preconditions; отсутствие Pod после уже
+проверенной успешной попытки не вызывает искусственный NotReady.
+Для TLS certificate expiry используется отдельная проверка при Gateway
+reconciliation; максимальная задержка очередного healthy resync — 12 минут.
 
 `Ready=True` требует текущих StorageReady, WebReady, CronReady, PushReady и
 SitesValidated. Отключённые Cron/Push удовлетворяют своим Conditions как Disabled.
