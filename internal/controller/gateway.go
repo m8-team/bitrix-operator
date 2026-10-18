@@ -36,10 +36,12 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 	if err != nil {
 		condition(c, "GatewayReady", metav1.ConditionFalse, "PublicationFailed", "Could not validate Gateway publication")
 		if issue, ok := errors.AsType[*blocked](err); ok {
+			// A known invalid publication is explicitly withdrawn.
 			condition(c, "GatewayReady", metav1.ConditionFalse, issue.reason, issue.message)
-			err = nil
+			return r.pruneRoutes(ctx, c, nil)
 		}
-		return errors.Join(err, r.pruneRoutes(ctx, c, nil))
+		// A transient API/transport error must not delete last-known-good routes.
+		return err
 	}
 	desired := desiredRoutes(c)
 	names := make([]string, 0, len(desired))
