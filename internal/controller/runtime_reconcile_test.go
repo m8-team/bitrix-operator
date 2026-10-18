@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"time"
+
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"testing"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
@@ -34,14 +38,14 @@ func TestRuntimeComponentsAreIndependentlyInjectable(t *testing.T) {
 		}}
 	}
 	components := []runtimeComponent{makeStep("storage", nil), makeStep("web", stop), makeStep("sites", nil)}
-	if err := runRuntimeComponents(context.Background(), &bx.BitrixCluster{}, &runtimeInputs{}, components); !errors.Is(err, stop) {
+	if _, err := runRuntimeComponents(context.Background(), &bx.BitrixCluster{}, &runtimeInputs{}, components); !errors.Is(err, stop) {
 		t.Fatalf("expected component failure, got %v", err)
 	}
 	if want := []string{"storage", "web"}; !slices.Equal(run, want) {
 		t.Fatalf("unexpected stages after failure: %v", run)
 	}
 	run = nil
-	if err := runRuntimeComponents(context.Background(), &bx.BitrixCluster{}, &runtimeInputs{}, components[:1]); err != nil {
+	if _, err := runRuntimeComponents(context.Background(), &bx.BitrixCluster{}, &runtimeInputs{}, components[:1]); err != nil {
 		t.Fatalf("isolated component failed: %v", err)
 	}
 	if !slices.Equal(run, []string{"storage"}) {
@@ -57,10 +61,67 @@ func TestRuntimeComponentsHonorCancellation(t *testing.T) {
 		called = true
 		return nil
 	}}
-	if err := runRuntimeComponents(ctx, &bx.BitrixCluster{}, &runtimeInputs{}, []runtimeComponent{c}); !errors.Is(err, context.Canceled) {
+	if _, err := runRuntimeComponents(ctx, &bx.BitrixCluster{}, &runtimeInputs{}, []runtimeComponent{c}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected cancellation, got %v", err)
 	}
 	if called {
 		t.Fatal("component ran after cancellation")
+	}
+}
+
+func TestRuntimeComponentsAggregateResultsOnPartialFailure(t *testing.T) {
+	failed := errors.New("configmap cleanup unavailable")
+	c := &bx.BitrixCluster{}
+	initializeReconcileStatus(c)
+	components := []runtimeComponent{
+		componentStep{name: "web-status", run: func(_ context.Context, observed *bx.BitrixCluster, _ *runtimeInputs) error {
+			condition(observed, "WebReady", metav1.ConditionTrue, "RolloutComplete", "web is ready")
+			return nil
+		}},
+		componentStep{name: "config-gc", run: func(_ context.Context, observed *bx.BitrixCluster, _ *runtimeInputs) error {
+			// A failing component must not overwrite the preceding observation.
+			condition(observed, "StorageReady", metav1.ConditionTrue, "VolumeBound", "storage is ready")
+			return failed
+		}},
+	}
+	results, err := runRuntimeComponents(context.Background(), c, &runtimeInputs{}, components)
+	if !errors.Is(err, failed) || !failedComponent(err, "config-gc") {
+		t.Fatalf("missing attributed GC failure: %v", err)
+	}
+	if len(results) != 2 || results[0].Name != "web-status" || results[1].Name != "config-gc" {
+		t.Fatalf("unexpected component results: %+v", results)
+	}
+	if !meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") ||
+		!meta.IsStatusConditionTrue(c.Status.Conditions, "StorageReady") {
+		t.Fatalf("lost observations after an error: %+v", c.Status.Conditions)
+	}
+	result, returnedErr := resolveReconcileResult(c, err, nil)
+	if returnedErr != nil || result.RequeueAfter != 30*time.Second {
+		t.Fatalf("unexpected GC error policy: result=%+v err=%v", result, returnedErr)
+	}
+	if !meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") ||
+		meta.IsStatusConditionTrue(c.Status.Conditions, "Ready") ||
+		c.Status.Phase != bx.BitrixClusterPhaseDegraded {
+		t.Fatalf("GC failure must not change observed web readiness: %+v", c.Status)
+	}
+}
+
+func TestComponentStepDoesNotMutateSharedStatus(t *testing.T) {
+	c := &bx.BitrixCluster{}
+	initializeReconcileStatus(c)
+	step := componentStep{name: "web-status", run: func(_ context.Context, isolated *bx.BitrixCluster, _ *runtimeInputs) error {
+		condition(isolated, "WebReady", metav1.ConditionTrue, "RolloutComplete", "ready")
+		return nil
+	}}
+	observation, err := step.Reconcile(context.Background(), c, &runtimeInputs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") {
+		t.Fatal("component mutated caller's CR before aggregation")
+	}
+	applyComponentResult(c, observation)
+	if !meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") {
+		t.Fatal("missing web readiness after aggregation")
 	}
 }
