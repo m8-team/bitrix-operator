@@ -74,6 +74,9 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 	condition(c, "GatewayReady", metav1.ConditionTrue, "RoutesReady", "The Gateway has accepted all current HTTPRoutes and resolved their references")
 	if meta.IsStatusConditionTrue(c.Status.Conditions, "SitesValidated") && meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") {
 		for i, site := range c.Spec.Sites {
+			// A same-generation retry preserves site status, so never append
+			// the same URL a second time to the schema's set-valued field.
+			c.Status.Sites[i].URLs = nil
 			scheme, standard := "http", gateway.PortNumber(80)
 			if p.listener.Protocol == gateway.HTTPSProtocolType {
 				scheme, standard = "https", 443
