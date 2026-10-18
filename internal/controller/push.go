@@ -60,6 +60,8 @@ func (r *BitrixClusterReconciler) reconcilePush(ctx context.Context, c *bx.Bitri
 	}
 	if ready {
 		condition(c, "PushReady", metav1.ConditionTrue, "RolloutComplete", "Both desired Push workloads are ready")
+	} else {
+		condition(c, conditionPushReady, metav1.ConditionFalse, "RolloutPending", "Waiting for both current Push Deployment rollouts")
 	}
 	return nil
 }
