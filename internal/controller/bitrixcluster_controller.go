@@ -107,17 +107,18 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	err := r.reconcileResources(ctx, c)
 	gatewayErr := r.reconcileGateway(ctx, c, err == nil)
 	result := ctrl.Result{RequeueAfter: 30 * time.Second}
+	var gatewayRetry time.Duration
 	if gatewayErr != nil {
 		issue := classifyReconcileError(gatewayErr, true)
 		condition(c, "GatewayReady", metav1.ConditionFalse, issue.reason, issue.message)
-		result.RequeueAfter = shorterRequeue(result.RequeueAfter, issue.retryAfter)
+		gatewayRetry = issue.retryAfter
 		gatewayErr = issue.cause
 	}
 	if err == nil {
 		summarizeReadiness(c)
 	} else {
 		issue := classifyReconcileError(err, false)
-		result.RequeueAfter = shorterRequeue(result.RequeueAfter, issue.retryAfter)
+		result.RequeueAfter = issue.retryAfter
 		c.Status.Phase = bx.BitrixClusterPhaseDegraded
 		condition(c, "Ready", metav1.ConditionFalse, issue.reason, issue.message)
 		condition(c, "WebReady", metav1.ConditionFalse, issue.reason, issue.message)
@@ -129,6 +130,7 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 		err = issue.cause
 	}
+	result.RequeueAfter = shorterRequeue(result.RequeueAfter, gatewayRetry)
 	// Conditions are evaluated provisionally above. Preserve transition times for unchanged final states.
 	for i := range c.Status.Conditions {
 		previous := meta.FindStatusCondition(before.Status.Conditions, c.Status.Conditions[i].Type)
