@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
 func TestRuntimeComponentOrder(t *testing.T) {
 	// The order is an operational contract: policy/ConfigMaps precede Pods,
 	// status observes the newly applied workload, and GC runs last.
