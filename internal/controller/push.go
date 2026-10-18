@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	render "github.com/m8-team/bitrix-operator/internal/runtime"
@@ -9,7 +10,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -90,28 +90,13 @@ func (r *BitrixClusterReconciler) deletePush(ctx context.Context, c *bx.BitrixCl
 }
 
 func (r *BitrixClusterReconciler) deletePushObject(ctx context.Context, c *bx.BitrixCluster, obj client.Object, foreground bool) (bool, error) {
-	err := r.reader().Get(ctx, client.ObjectKeyFromObject(obj), obj)
-	if apierrors.IsNotFound(err) {
-		return false, nil
-	}
+	found, err := r.deleteOwnedResource(ctx, c, obj, foreground)
 	if err != nil {
-		condition(c, "PushReady", metav1.ConditionFalse, "CleanupFailed", "Could not inspect a Push resource during cleanup")
-		return false, err
-	}
-	if !controlledByCluster(c, obj) {
-		condition(c, "PushReady", metav1.ConditionFalse, "ResourceCollision", "A Push resource is not controlled by this BitrixCluster")
-		return true, block("ResourceCollision", "A Push resource is not controlled by this BitrixCluster")
-	}
-	if obj.GetDeletionTimestamp().IsZero() {
-		uid, rv := obj.GetUID(), obj.GetResourceVersion()
-		options := []client.DeleteOption{client.Preconditions{UID: &uid, ResourceVersion: &rv}}
-		if foreground {
-			options = append(options, client.PropagationPolicy(metav1.DeletePropagationForeground))
-		}
-		if err = r.Delete(ctx, obj, options...); err != nil && !apierrors.IsNotFound(err) {
-			condition(c, "PushReady", metav1.ConditionFalse, "CleanupFailed", "Could not delete an owned Push resource")
-			return true, err
+		if collision, ok := errors.AsType[*blocked](err); ok {
+			condition(c, "PushReady", metav1.ConditionFalse, collision.reason, collision.message)
+		} else {
+			condition(c, "PushReady", metav1.ConditionFalse, "CleanupFailed", "Could not inspect or delete an owned Push resource")
 		}
 	}
-	return true, nil
+	return found, err
 }

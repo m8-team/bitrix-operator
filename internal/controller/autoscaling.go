@@ -10,7 +10,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -55,23 +54,15 @@ func validateAutoscaling(c *bx.BitrixCluster) error {
 // HPA must be fully gone before returning replicas to the operator, including when
 // unrelated runtime configuration is invalid. Deletion uses UID/RV preconditions.
 func (r *BitrixClusterReconciler) deleteHPA(ctx context.Context, c *bx.BitrixCluster) error {
-	h := &autoscalingv2.HorizontalPodAutoscaler{}
-	err := r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "web")}, h)
-	if apierrors.IsNotFound(err) {
-		return nil
-	}
+	h := &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{Name: workload.Name(c, "web"), Namespace: c.Namespace}}
+	found, err := r.deleteOwnedResource(ctx, c, h, false)
 	if err != nil {
 		return err
 	}
-	if !controlledByCluster(c, h) {
-		return block("ResourceCollision", "The HPA is not controlled by this BitrixCluster")
+	if found {
+		return block("AutoscalingStopping", "Waiting for the owned HPA to disappear before restoring fixed replicas")
 	}
-	if h.DeletionTimestamp.IsZero() {
-		if err = client.IgnoreNotFound(r.Delete(ctx, h, client.Preconditions{UID: &h.UID, ResourceVersion: &h.ResourceVersion})); err != nil {
-			return err
-		}
-	}
-	return block("AutoscalingStopping", "Waiting for the owned HPA to disappear before restoring fixed replicas")
+	return nil
 }
 
 func (r *BitrixClusterReconciler) reconcileHPA(ctx context.Context, c *bx.BitrixCluster) error {
