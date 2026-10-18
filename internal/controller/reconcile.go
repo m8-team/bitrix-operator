@@ -21,7 +21,13 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	before := cluster.DeepCopy()
 	initializeReconcileStatus(cluster)
 	resourceErr := r.reconcileResources(ctx, cluster)
-	publicationErr := r.reconcileGateway(ctx, cluster, resourceErr == nil)
+	// GC happens after the rollout, so a GC failure must not suppress
+	// otherwise valid publication or clear observed Gateway readiness.
+	runtimeValid := resourceErr == nil || failedComponent(resourceErr, "config-gc")
+	publication, publicationErr := captureComponentResult("gateway", cluster, func(snapshot *bx.BitrixCluster) error {
+		return r.reconcileGateway(ctx, snapshot, runtimeValid)
+	})
+	applyComponentResult(cluster, publication)
 	result, err := resolveReconcileResult(cluster, resourceErr, publicationErr)
 	preserveConditionTransitions(before, cluster)
 	if patchErr := r.persistReconcileStatus(ctx, before, cluster); patchErr != nil {
