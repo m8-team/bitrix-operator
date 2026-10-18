@@ -8,17 +8,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
+const operatorMetricsNamespace = "bitrix_operator"
+
 // Stage names and outcomes are bounded enums, never BitrixCluster/site/Secret names.
 // In particular, no error strings or credentials enter Prometheus labels.
 var stageDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
-	Namespace: "bitrix_operator",
+	Namespace: operatorMetricsNamespace,
 	Name:      "reconcile_stage_duration_seconds",
 	Help:      "Time spent in a reconciliation stage, classified by its disposition.",
 	Buckets:   prometheus.DefBuckets,
 }, []string{"stage", "outcome"})
 
 var stageAttempts = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Namespace: "bitrix_operator",
+	Namespace: operatorMetricsNamespace,
 	Name:      "reconcile_stage_attempts_total",
 	Help:      "Number of stage attempts by result disposition.",
 }, []string{"stage", "outcome"})
@@ -26,7 +28,7 @@ var stageAttempts = prometheus.NewCounterVec(prometheus.CounterOpts{
 // Reconcile outcomes provide an aggregate signal without resource names or
 // unbounded reason/message labels. Stage metrics remain the detail drilldown.
 var reconcileOutcome = prometheus.NewCounterVec(prometheus.CounterOpts{
-	Namespace: "bitrix_operator",
+	Namespace: operatorMetricsNamespace,
 	Name:      "reconcile_outcomes_total",
 	Help:      "Completed reconciliations by final result, with fixed label values.",
 }, []string{"result"})
