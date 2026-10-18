@@ -140,6 +140,12 @@ func (r *BitrixClusterReconciler) deleteValidationJob(ctx context.Context, j *ba
 }
 
 func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision, image string) error {
+	// Site existence is identity-sensitive: a successful previous Job must not
+	// keep reporting Exists when the runtime is changing or validation is pending.
+	for i := range c.Status.Sites {
+		c.Status.Sites[i].Exists = false
+		c.Status.Sites[i].Message = "Site existence has not been confirmed for the current runtime"
+	}
 	if !meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") {
 		condition(c, conditionSitesValidated, metav1.ConditionUnknown, "RuntimeUnresolved", "Waiting for a ready web runtime before site validation")
 		return nil
