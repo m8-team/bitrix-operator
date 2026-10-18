@@ -3,7 +3,7 @@
 Итерация добавляет чистый renderer `internal/runtime`, build-time подготовку release
 и исполняемые проверки конфигураций. В итерации 3 добавлены Deployment, Service,
 retained PVC и dependency probes — см. [web workloads](web-workloads.md). API
-расширен для site-validation и других runtime-ресурсов. Read-only D7
+не изменён; RBAC расширен для site-validation и других runtime-ресурсов. Read-only D7
 site-validation Job реализован в итерации 6.1, см. [Sites](sites.md).
 
 ## Родные файловые шаблоны — итерация 2.1
