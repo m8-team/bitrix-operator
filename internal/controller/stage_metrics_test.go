@@ -24,7 +24,7 @@ func TestStageMetricLabelsAreBounded(t *testing.T) {
 func TestStageMetricDispositions(t *testing.T) {
 	tests := []struct {
 		name string
-		err error
+		err  error
 		want string
 	}{
 		{"config", nil, "success"},
