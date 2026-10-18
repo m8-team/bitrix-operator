@@ -94,14 +94,7 @@ func phpProbe() *core.ProbeApplyConfiguration {
 func phpPod(c *bx.BitrixCluster, b *render.Bundle, image string) *core.PodSpecApplyConfiguration {
 	phpConfig := Name(c, "php-"+b.Hash[:12])
 	mode := int32(0444)
-	projected := core.ProjectedVolumeSource().WithDefaultMode(0440)
-	for _, p := range b.Secrets {
-		secret := core.SecretProjection().WithName(p.Secret.Name).WithOptional(false)
-		for _, item := range p.Secret.Items {
-			secret.WithItems(core.KeyToPath().WithKey(item.Key).WithPath(item.Path).WithMode(*item.Mode))
-		}
-		projected.WithSources(core.VolumeProjection().WithSecret(secret))
-	}
+	projected := projectedSecrets(b.Secrets)
 	pod := core.PodSpec().WithAutomountServiceAccountToken(false).WithTerminationGracePeriodSeconds(30).
 		WithSecurityContext(core.PodSecurityContext().WithRunAsNonRoot(true).WithRunAsUser(979).WithRunAsGroup(979).
 			WithFSGroup(979).WithFSGroupChangePolicy(corev1.FSGroupChangeOnRootMismatch).

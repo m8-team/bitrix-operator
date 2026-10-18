@@ -123,7 +123,7 @@ type ReleaseImageSpec struct {
 
 	// Digest pins the image to immutable content. The controller should prefer the
 	// digest over the tag when both are specified.
-	// +kubebuilder:validation:Pattern=`^sha256:[a-fA-F0-9]+$`
+	// +kubebuilder:validation:Pattern=`^sha256:[a-f0-9]{64}$`
 	// +optional
 	Digest string `json:"digest,omitempty"`
 
@@ -425,12 +425,12 @@ type RedisCacheSpec struct {
 // RedisSessionsSpec configures Redis-backed PHP sessions.
 type RedisSessionsSpec struct {
 	// Mode configures the Bitrix session storage mode.
-	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Enum=default;separated
 	// +required
 	Mode string `json:"mode"`
 
 	// TTL is the session lifetime in seconds.
-	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Minimum=1
 	// +required
 	TTL int64 `json:"ttl"`
 }

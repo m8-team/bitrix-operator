@@ -321,12 +321,14 @@ spec:
                     properties:
                       mode:
                         description: Mode configures the Bitrix session storage mode.
-                        minLength: 1
+                        enum:
+                        - default
+                        - separated
                         type: string
                       ttl:
                         description: TTL is the session lifetime in seconds.
                         format: int64
-                        minimum: 0
+                        minimum: 1
                         type: integer
                     required:
                     - mode
@@ -351,7 +353,7 @@ spec:
                         description: |-
                           Digest pins the image to immutable content. The controller should prefer the
                           digest over the tag when both are specified.
-                        pattern: ^sha256:[a-fA-F0-9]+$
+                        pattern: ^sha256:[a-f0-9]{64}$
                         type: string
                       pullPolicy:
                         default: IfNotPresent
@@ -1205,9 +1207,10 @@ rules:
   - ""
   resources:
   - configmaps
-  - persistentvolumeclaims
+  - services
   verbs:
   - create
+  - delete
   - get
   - list
   - patch
@@ -1225,10 +1228,9 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - services
+  - persistentvolumeclaims
   verbs:
   - create
-  - delete
   - get
   - list
   - patch

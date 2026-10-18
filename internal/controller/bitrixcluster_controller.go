@@ -39,10 +39,11 @@ import (
 
 type BitrixClusterReconciler struct {
 	client.Client
-	Scheme              *runtime.Scheme
-	APIReader           client.Reader
-	GatewayAPIAvailable bool
-	Recorder            events.EventRecorder
+	Scheme               *runtime.Scheme
+	APIReader            client.Reader
+	GatewayAPIAvailable  bool
+	GatewayParentIndexed bool
+	Recorder             events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
@@ -58,7 +59,7 @@ type BitrixClusterReconciler struct {
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;patch;delete
-// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;patch
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;patch;delete
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;create;patch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
@@ -253,7 +254,13 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.
 	if rollout.deadlineExceeded {
 		return block(progressDeadlineExceeded, "The web Deployment exceeded its rollout deadline")
 	}
-	return r.reconcileSites(ctx, c, b, revision, image)
+	if err := r.reconcileSites(ctx, c, b, revision, image); err != nil {
+		return err
+	}
+	if rollout.ready && pvc.Status.Phase == corev1.ClaimBound {
+		return r.pruneConfigMaps(ctx, c, b)
+	}
+	return nil
 }
 
 func (r *BitrixClusterReconciler) deleteDisabledRuntime(ctx context.Context, c *bx.BitrixCluster) error {

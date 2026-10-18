@@ -132,6 +132,15 @@ var _ = Describe("API server schema and defaults", func() {
 			db := s["database"].(map[string]any)
 			db["connections"] = append(db["connections"].([]any), connection(s))
 		}),
+		Entry("invalid Redis session mode", func(s map[string]any) {
+			s["redis"].(map[string]any)["sessions"].(map[string]any)["mode"] = "unrecognized"
+		}),
+		Entry("zero Redis session lifetime", func(s map[string]any) {
+			s["redis"].(map[string]any)["sessions"].(map[string]any)["ttl"] = int64(0)
+		}),
+		Entry("invalid image digest", func(s map[string]any) {
+			s["release"].(map[string]any)["image"].(map[string]any)["digest"] = "sha256:abc"
+		}),
 		Entry("invalid pull policy", func(s map[string]any) {
 			s["release"].(map[string]any)["image"].(map[string]any)["pullPolicy"] = "Sometimes"
 		}),

@@ -23,8 +23,11 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 		return r.pruneRoutes(ctx, c, nil)
 	}
 	if !runtimeValid {
+		// Preserve last-known-good routes during reconciliation failures.
+		// An API outage, SSA conflict or temporarily missing Secret must not
+		// remove ingress for otherwise healthy existing web workloads.
 		condition(c, "GatewayReady", metav1.ConditionFalse, "RuntimeInvalid", "Publication waits for a valid runtime configuration")
-		return r.pruneRoutes(ctx, c, nil)
+		return nil
 	}
 	p, err := r.publication(ctx, c)
 	if err == nil {
@@ -164,7 +167,11 @@ func routeAccepted(route *gateway.HTTPRoute, p *publication, parent *bx.GatewayP
 func (r *BitrixClusterReconciler) hostConflicts(ctx context.Context, c *bx.BitrixCluster, p *publication) error {
 	parent := c.Spec.Networking.Gateway.ParentRef
 	clusters := &bx.BitrixClusterList{}
-	if err := r.reader().List(ctx, clusters); err != nil {
+	if r.GatewayParentIndexed {
+		if err := r.List(ctx, clusters, client.MatchingFields{gatewayParentIndex: gatewayParentKey(parent.Namespace, parent.Name)}); err != nil {
+			return err
+		}
+	} else if err := r.reader().List(ctx, clusters); err != nil {
 		return err
 	}
 	for _, other := range clusters.Items {
@@ -184,7 +191,11 @@ func (r *BitrixClusterReconciler) hostConflicts(ctx context.Context, c *bx.Bitri
 		}
 	}
 	routes := &gateway.HTTPRouteList{}
-	if err := r.reader().List(ctx, routes); err != nil {
+	if r.GatewayParentIndexed {
+		if err := r.List(ctx, routes, client.MatchingFields{routeParentIndex: gatewayParentKey(parent.Namespace, parent.Name)}); err != nil {
+			return err
+		}
+	} else if err := r.reader().List(ctx, routes); err != nil {
 		return err
 	}
 	for _, route := range routes.Items {
