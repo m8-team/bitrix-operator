@@ -35,7 +35,9 @@ type gatewayCleanupError struct {
 	cause           error
 }
 
-func (e *gatewayCleanupError) Error() string { return e.message + ": route cleanup failed: " + e.cause.Error() }
+func (e *gatewayCleanupError) Error() string {
+	return e.message + ": route cleanup failed: " + e.cause.Error()
+}
 func (e *gatewayCleanupError) Unwrap() error { return e.cause }
 
 type reconcileFailure struct {
