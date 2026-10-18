@@ -28,9 +28,18 @@ var _ = Describe("Versioned runtime ConfigMap garbage collection", func() {
 		retired := workload.Name(c, "php-abcdef012345")
 		unrelated := workload.Name(c, "other-abcdef012345")
 		for _, name := range []string{legacy, retired, unrelated} {
-			cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: c.Namespace,
-				Labels: map[string]string{workload.OwnerUID: string(c.UID)},
-				OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(c, bx.GroupVersion.WithKind("BitrixCluster"))}}}
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: c.Namespace,
+					Labels: map[string]string{
+						workload.OwnerUID: string(c.UID),
+					},
+					OwnerReferences: []metav1.OwnerReference{
+						*metav1.NewControllerRef(c, bx.GroupVersion.WithKind("BitrixCluster")),
+					},
+				},
+			}
 			Expect(k8sClient.Create(ctx, cm)).To(Succeed())
 		}
 		// A retained ReplicaSet still needs the previous revision for rollback.
