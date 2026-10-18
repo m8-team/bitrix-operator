@@ -4,11 +4,10 @@ import (
 	"context"
 	"slices"
 
-	"k8s.io/apimachinery/pkg/util/sets"
-
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gateway "sigs.k8s.io/gateway-api/apis/v1"

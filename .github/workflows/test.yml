@@ -26,8 +26,11 @@ jobs:
           go-version-file: go.mod
       - name: Formatting, module integrity and unchanged API contract
         run: |
-          gofmt -l api cmd internal test
-          test -z "$(gofmt -l api cmd internal test)"
+          diff="$(gofmt -d api cmd internal test)"
+          if [ -n "$diff" ]; then
+            printf '%s\n' "$diff"
+            exit 1
+          fi
           go mod verify
           go mod tidy
           git diff --exit-code -- go.mod go.sum

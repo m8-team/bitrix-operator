@@ -39,11 +39,11 @@ import (
 
 type BitrixClusterReconciler struct {
 	client.Client
-	Scheme              *runtime.Scheme
-	APIReader           client.Reader
-	GatewayAPIAvailable bool
+	Scheme               *runtime.Scheme
+	APIReader            client.Reader
+	GatewayAPIAvailable  bool
 	GatewayParentIndexed bool
-	Recorder            events.EventRecorder
+	Recorder             events.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
