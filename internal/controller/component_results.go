@@ -18,17 +18,17 @@ type ComponentResult struct {
 	// Applied is true when the stage completed applying or checking its desired
 	// objects without error. It is NOT evidence of workload readiness: observed
 	// health is carried exclusively in Conditions and workload status.
-	Applied    bool
-	Name       string
-	Conditions []metav1.Condition
-	Runtime    *bx.RuntimeStatus
-	Release    *bx.ReleaseStatus
-	Sites      []bx.BitrixSiteStatus
+	Applied        bool
+	Name           string
+	Conditions     []metav1.Condition
+	Runtime        *bx.RuntimeStatus
+	Release        *bx.ReleaseStatus
+	Sites          []bx.BitrixSiteStatus
 	SiteValidation *bx.SiteValidationStatus
 
-	RuntimeChanged bool
-	ReleaseChanged bool
-	SitesChanged   bool
+	RuntimeChanged        bool
+	ReleaseChanged        bool
+	SitesChanged          bool
 	SiteValidationChanged bool
 }
 
