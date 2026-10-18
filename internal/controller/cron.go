@@ -20,7 +20,7 @@ func (r *BitrixClusterReconciler) deleteCron(ctx context.Context, c *bx.BitrixCl
 		return err
 	}
 	if found {
-		return block("CronStopping", "Waiting for the owned cron Deployment and its Pods to terminate")
+		return waitFor("CronStopping", "Waiting for the owned cron Deployment and its Pods to terminate", pendingRequeueAfter)
 	}
 	return nil
 }
