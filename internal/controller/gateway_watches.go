@@ -24,6 +24,7 @@ func gatewayAPIsAvailable(mapper meta.RESTMapper) (bool, error) {
 	}
 	return true, nil
 }
+
 // Keyed dependency indexes keep Gateway events local to their consumers.
 func gatewayParentKey(namespace, name string) string {
 	return namespace + "/" + name
