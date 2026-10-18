@@ -17,7 +17,9 @@ limitations under the License.
 package controller
 
 import (
+	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -148,6 +150,39 @@ var _ = Describe("API server schema and defaults", func() {
 			s["sites"].([]any)[0].(map[string]any)["tls"] = map[string]any{}
 		}),
 		Entry("empty sites", func(s map[string]any) { s["sites"] = []any{} }),
+		Entry("uppercase hostname", func(s map[string]any) {
+			s["sites"].([]any)[0].(map[string]any)["hosts"] = []any{"Portal.example.com"}
+		}),
+		Entry("wildcard hostname", func(s map[string]any) {
+			s["sites"].([]any)[0].(map[string]any)["hosts"] = []any{"*.example.com"}
+		}),
+		Entry("literal IPv4 host", func(s map[string]any) {
+			s["sites"].([]any)[0].(map[string]any)["hosts"] = []any{"192.168.1.1"}
+		}),
+		Entry("overlong DNS label", func(s map[string]any) {
+			s["sites"].([]any)[0].(map[string]any)["hosts"] = []any{strings.Repeat("a", 64) + ".example.com"}
+		}),
+		Entry("overlong hostname", func(s map[string]any) {
+			s["sites"].([]any)[0].(map[string]any)["hosts"] = []any{strings.Repeat("a.", 127) + "com"}
+		}),
+		Entry("duplicate hostname across site IDs", func(s map[string]any) {
+			first := s["sites"].([]any)[0].(map[string]any)
+			s["sites"] = append(s["sites"].([]any), map[string]any{"id": "s2", "hosts": []any{first["hosts"].([]any)[0]}})
+		}),
+		Entry("too many site hosts", func(s map[string]any) {
+			hosts := make([]any, 33)
+			for i := range hosts {
+				hosts[i] = fmt.Sprintf("host-%d.example.com", i)
+			}
+			s["sites"].([]any)[0].(map[string]any)["hosts"] = hosts
+		}),
+		Entry("too many sites for bounded site result", func(s map[string]any) {
+			sites := make([]any, 65)
+			for i := range sites {
+				sites[i] = map[string]any{"id": fmt.Sprintf("s%d", i), "hosts": []any{fmt.Sprintf("s%d.example.com", i)}}
+			}
+			s["sites"] = sites
+		}),
 		Entry("cron enabled without agents", func(s map[string]any) {
 			s["runtime"].(map[string]any)["cron"] = map[string]any{"enabled": true}
 		}),
@@ -167,6 +202,23 @@ var _ = Describe("API server schema and defaults", func() {
 			s["storage"].(map[string]any)["temporary"].(map[string]any)["type"] = "PersistentVolumeClaim"
 		}),
 	)
+
+	It("rejects conflicting hostnames on spec updates", func() {
+		obj := createSample()
+		current := obj.Spec.Sites[0]
+		obj.Spec.Sites = append(obj.Spec.Sites, bitrixv1alpha1.BitrixSiteSpec{ID: "s2", Hosts: []string{current.Hosts[0]}})
+		err := k8sClient.Update(ctx, obj)
+		Expect(apierrors.IsInvalid(err)).To(BeTrue(), "expected admission rejection on update, got: %v", err)
+	})
+
+	It("accepts multiple sites with disjoint aliases and DNS names at limits", func() {
+		obj := sample()
+		sites := obj.Object["spec"].(map[string]any)["sites"].([]any)
+		sites[0].(map[string]any)["hosts"] = []any{"portal.example.com", "www.example.com", strings.Repeat("a", 63) + ".example.com"}
+		obj.Object["spec"].(map[string]any)["sites"] = append(sites, map[string]any{"id": "s2", "hosts": []any{"shop.example.com"}})
+		Expect(k8sClient.Create(ctx, obj)).To(Succeed())
+		DeferCleanup(func() { Expect(k8sClient.Delete(ctx, obj)).To(Succeed()) })
+	})
 
 	It("accepts disabled optional objects without their enabled-only fields", func() {
 		obj := sample()

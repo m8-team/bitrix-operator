@@ -70,6 +70,8 @@ type BitrixClusterSpec struct {
 	// Sites maps existing Bitrix site IDs to externally published hosts.
 	// Site existence is validated by the controller against the Bitrix installation.
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:XValidation:rule="self.all(s, self.all(other, s.id == other.id || !s.hosts.exists(h, h in other.hosts)))",message="hostnames must be unique across sites"
 	// +listType=map
 	// +listMapKey=id
 	// +required
@@ -150,9 +152,14 @@ type BitrixSiteSpec struct {
 	// +required
 	ID string `json:"id"`
 
-	// Hosts contains DNS names routed to this Bitrix site.
+	// Hosts contains lowercase DNS-1123 subdomains routed to this Bitrix site.
+	// Literal IP addresses, wildcard names and duplicates across sites are forbidden.
 	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=32
 	// +kubebuilder:validation:items:MinLength=1
+	// +kubebuilder:validation:items:MaxLength=253
+	// +kubebuilder:validation:items:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
+	// +kubebuilder:validation:XValidation:rule="self.all(h, !h.matches('^[0-9]+([.][0-9]+){3}$'))",message="literal IPv4 addresses are not allowed as site hosts"
 	// +listType=set
 	// +required
 	Hosts []string `json:"hosts"`

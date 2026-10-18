@@ -711,14 +711,21 @@ spec:
                     one or more hosts.
                   properties:
                     hosts:
-                      description: Hosts contains DNS names routed to this Bitrix
-                        site.
+                      description: |-
+                        Hosts contains lowercase DNS-1123 subdomains routed to this Bitrix site.
+                        Literal IP addresses, wildcard names and duplicates across sites are forbidden.
                       items:
+                        maxLength: 253
                         minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                         type: string
+                      maxItems: 32
                       minItems: 1
                       type: array
                       x-kubernetes-list-type: set
+                      x-kubernetes-validations:
+                      - message: literal IPv4 addresses are not allowed as site hosts
+                        rule: self.all(h, !h.matches('^[0-9]+([.][0-9]+){3}$'))
                     id:
                       description: ID is the real Bitrix site ID, for example s1 or
                         s2.
@@ -744,11 +751,16 @@ spec:
                   - hosts
                   - id
                   type: object
+                maxItems: 64
                 minItems: 1
                 type: array
                 x-kubernetes-list-map-keys:
                 - id
                 x-kubernetes-list-type: map
+                x-kubernetes-validations:
+                - message: hostnames must be unique across sites
+                  rule: self.all(s, self.all(other, s.id == other.id || !s.hosts.exists(h,
+                    h in other.hosts)))
               storage:
                 description: Storage configures persistent uploads and temporary runtime
                   storage.
