@@ -24,10 +24,12 @@ type ComponentResult struct {
 	Runtime    *bx.RuntimeStatus
 	Release    *bx.ReleaseStatus
 	Sites      []bx.BitrixSiteStatus
+	SiteValidation *bx.SiteValidationStatus
 
 	RuntimeChanged bool
 	ReleaseChanged bool
 	SitesChanged   bool
+	SiteValidationChanged bool
 }
 
 // captureComponentResult isolates older component implementations that still
@@ -57,6 +59,10 @@ func captureComponentResult(name string, cluster *bx.BitrixCluster, reconcile fu
 		result.SitesChanged = true
 		result.Sites = snapshot.Status.Sites
 	}
+	if !reflect.DeepEqual(cluster.Status.SiteValidation, snapshot.Status.SiteValidation) {
+		result.SiteValidationChanged = true
+		result.SiteValidation = snapshot.Status.SiteValidation
+	}
 	return result, err
 }
 
@@ -74,6 +80,9 @@ func applyComponentResult(cluster *bx.BitrixCluster, result ComponentResult) {
 	}
 	if result.SitesChanged {
 		cluster.Status.Sites = result.Sites
+	}
+	if result.SiteValidationChanged {
+		cluster.Status.SiteValidation = result.SiteValidation
 	}
 }
 
