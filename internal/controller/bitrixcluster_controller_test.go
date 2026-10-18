@@ -171,12 +171,16 @@ var _ = Describe("API server schema and defaults", func() {
 		}),
 		Entry("too many site hosts", func(s map[string]any) {
 			hosts := make([]any, 17)
-			for i := range hosts { hosts[i] = fmt.Sprintf("host-%d.example.com", i) }
+			for i := range hosts {
+				hosts[i] = fmt.Sprintf("host-%d.example.com", i)
+			}
 			s["sites"].([]any)[0].(map[string]any)["hosts"] = hosts
 		}),
 		Entry("too many sites for bounded site result", func(s map[string]any) {
 			sites := make([]any, 65)
-			for i := range sites { sites[i] = map[string]any{"id": fmt.Sprintf("s%d", i), "hosts": []any{fmt.Sprintf("s%d.example.com", i)}} }
+			for i := range sites {
+				sites[i] = map[string]any{"id": fmt.Sprintf("s%d", i), "hosts": []any{fmt.Sprintf("s%d.example.com", i)}}
+			}
 			s["sites"] = sites
 		}),
 		Entry("cron enabled without agents", func(s map[string]any) {
@@ -198,7 +202,6 @@ var _ = Describe("API server schema and defaults", func() {
 			s["storage"].(map[string]any)["temporary"].(map[string]any)["type"] = "PersistentVolumeClaim"
 		}),
 	)
-
 
 	It("rejects conflicting hostnames on spec updates", func() {
 		obj := createSample()
