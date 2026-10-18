@@ -28,6 +28,13 @@ def validate_runs(runs, sha):
         raise ValueError("Latest main CI run is not successful")
 
 
+def validate_main_ancestry(compare):
+    # A release candidate must be in main history, but merging a newer PR
+    # while the release environment awaits approval must not invalidate it.
+    if compare.get("status") not in ("ahead", "identical") or compare.get("behind_by") != 0:
+        raise ValueError("Release commit must be an ancestor of current main")
+
+
 def api(path, allow_missing=False):
     req = urllib.request.Request(
         "https://api.github.com/repos/" + os.environ["GITHUB_REPOSITORY"] + path,
@@ -50,9 +57,11 @@ def main():
         raise ValueError("Publishing is restricted to the canonical repository")
     if api("/releases/tags/" + urllib.parse.quote(tag), allow_missing=True) is not None:
         raise ValueError("Release already exists; never overwrite it")
-    # Only main HEAD is eligible, avoiding a new tag on an obsolete/security-fixed commit.
-    if api("/commits/main")["sha"] != sha:
-        raise ValueError("Release commit must equal current main HEAD")
+    # The SHA is immutable and covered by successful main push CI on that exact
+    # commit. Recheck ancestry after environment approval, not equality to a
+    # moving main HEAD; the release build also rescans this SHA at publish time.
+    comparison = api("/compare/" + urllib.parse.quote(sha) + "...main")
+    validate_main_ancestry(comparison)
     for workflow in WORKFLOWS:
         query = urllib.parse.urlencode({"head_sha": sha, "event": "push", "branch": "main", "per_page": 100})
         runs = api("/actions/workflows/" + workflow + "/runs?" + query)["workflow_runs"]
