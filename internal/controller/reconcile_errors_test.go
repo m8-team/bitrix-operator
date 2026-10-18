@@ -15,29 +15,32 @@ func TestClassifyReconcileError(t *testing.T) {
 		name          string
 		err           error
 		publication   bool
+		disposition   reconcileDisposition
 		reason        string
 		retryAfter    time.Duration
 		preserveError bool
 	}{
-		{name: "missing required Secret", err: block("SecretMissing", "secret absent"), reason: "SecretMissing", retryAfter: time.Minute},
-		{name: "invalid configuration", err: block("InvalidRuntimeConfiguration", "bad config"), reason: "InvalidRuntimeConfiguration", retryAfter: time.Minute},
-		{name: "conflicting apply", err: apierrors.NewConflict(resource, "web", errors.New("conflict")), reason: "ApplyConflict", retryAfter: 10 * time.Second},
-		{name: "conflicting Gateway", err: apierrors.NewConflict(resource, "route", errors.New("conflict")), publication: true, reason: "ResourceConflict", retryAfter: 10 * time.Second},
-		{name: "throttled API", err: apierrors.NewTooManyRequests("busy", 1), reason: "APIUnavailable", preserveError: true},
-		{name: "missing Kubernetes dependency", err: apierrors.NewNotFound(resource, "web"), reason: "DependencyMissing", preserveError: true},
-		{name: "unexpected failure", err: errors.New("transport failure"), reason: "ReconcileFailed", preserveError: true},
-		{name: "publication failure", err: errors.New("transport failure"), publication: true, reason: "PublicationFailed", preserveError: true},
+		{name: "pending observation", disposition: dispositionWaiting, retryAfter: 30 * time.Second},
+		{name: "explicit waiting", err: waitFor("RolloutPending", "waiting for replicas", 12*time.Second), disposition: dispositionWaiting, reason: "RolloutPending", retryAfter: 12 * time.Second},
+		{name: "missing required Secret", err: block("SecretMissing", "secret absent"), disposition: dispositionBlocked, reason: "SecretMissing", retryAfter: time.Minute},
+		{name: "invalid configuration", err: block("InvalidRuntimeConfiguration", "bad config"), disposition: dispositionBlocked, reason: "InvalidRuntimeConfiguration", retryAfter: time.Minute},
+		{name: "conflicting apply", err: apierrors.NewConflict(resource, "web", errors.New("conflict")), disposition: dispositionWaiting, reason: "ApplyConflict", retryAfter: 10 * time.Second},
+		{name: "conflicting Gateway", err: apierrors.NewConflict(resource, "route", errors.New("conflict")), publication: true, disposition: dispositionWaiting, reason: "ResourceConflict", retryAfter: 10 * time.Second},
+		{name: "throttled API", err: apierrors.NewTooManyRequests("busy", 1), disposition: dispositionTransient, reason: "APIUnavailable", preserveError: true},
+		{name: "missing Kubernetes dependency", err: apierrors.NewNotFound(resource, "web"), disposition: dispositionTransient, reason: "DependencyMissing", preserveError: true},
+		{name: "unexpected failure", err: errors.New("transport failure"), disposition: dispositionTransient, reason: "ReconcileFailed", preserveError: true},
+		{name: "publication failure", err: errors.New("transport failure"), publication: true, disposition: dispositionTransient, reason: "PublicationFailed", preserveError: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := classifyReconcileError(tc.err, tc.publication)
-			if got.reason != tc.reason || got.retryAfter != tc.retryAfter {
-				t.Fatalf("unexpected policy: got %#v, want reason %q and retry %s", got, tc.reason, tc.retryAfter)
+			if got.disposition != tc.disposition || got.reason != tc.reason || got.retryAfter != tc.retryAfter {
+				t.Fatalf("unexpected policy: got %#v, want class %q, reason %q, retry %s", got, tc.disposition, tc.reason, tc.retryAfter)
 			}
 			if (got.cause != nil) != tc.preserveError {
 				t.Fatalf("unexpected retry disposition for %q: cause=%v", tc.name, got.cause)
 			}
-			if got.message == "" {
+			if tc.err != nil && got.message == "" {
 				t.Fatal("missing user-visible condition message")
 			}
 		})

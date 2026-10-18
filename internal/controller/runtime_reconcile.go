@@ -10,8 +10,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// runtimeInputs are produced once, then shared read-only between the runtime
-// components. Only the observed web readiness is filled in by the web stage.
+// runtimeInputs contain reconcile-local dependencies shared across stages.
+// The web observation stage records rollout readiness for downstream GC.
 type runtimeInputs struct {
 	bundle   *render.Bundle
 	revision string
@@ -25,7 +25,7 @@ type runtimeInputs struct {
 // and resource APIs do not depend on this orchestration layer.
 type runtimeComponent interface {
 	Name() string
-	Reconcile(context.Context, *bx.BitrixCluster, *runtimeInputs) error
+	Reconcile(context.Context, *bx.BitrixCluster, *runtimeInputs) (ComponentResult, error)
 }
 
 type componentStep struct {
@@ -34,30 +34,44 @@ type componentStep struct {
 }
 
 func (s componentStep) Name() string { return s.name }
-func (s componentStep) Reconcile(ctx context.Context, c *bx.BitrixCluster, in *runtimeInputs) error {
-	return s.run(ctx, c, in)
+func (s componentStep) Reconcile(ctx context.Context, c *bx.BitrixCluster, in *runtimeInputs) (ComponentResult, error) {
+	return captureComponentResult(s.name, c, func(snapshot *bx.BitrixCluster) error {
+		return s.run(ctx, snapshot, in)
+	})
 }
 
-// runRuntimeComponents stops on the first error; later components must not
-// observe an incomplete previous stage. This is also used by pure unit tests.
-func runRuntimeComponents(ctx context.Context, c *bx.BitrixCluster, in *runtimeInputs, components []runtimeComponent) error {
+// runRuntimeComponents gathers isolated observations and applies only their
+// explicit status deltas. A failed stage still contributes observations made
+// before its error; later stages cannot run against incomplete prerequisites.
+func runRuntimeComponents(ctx context.Context, c *bx.BitrixCluster, in *runtimeInputs, components []runtimeComponent) ([]ComponentResult, error) {
+	results := make([]ComponentResult, 0, len(components))
 	for _, component := range components {
 		if err := ctx.Err(); err != nil {
-			return err
+			return results, err
 		}
-		if err := component.Reconcile(ctx, c, in); err != nil {
-			return err
+		result, err := component.Reconcile(ctx, c, in)
+		applyComponentResult(c, result)
+		results = append(results, result)
+		if err != nil {
+			return results, &componentError{name: component.Name(), cause: err}
 		}
 	}
-	return nil
+	return results, nil
 }
 
 func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.BitrixCluster) error {
-	in, err := r.prepareRuntime(ctx, c)
+	var in *runtimeInputs
+	preparation, err := captureComponentResult("prepare", c, func(snapshot *bx.BitrixCluster) error {
+		var prepErr error
+		in, prepErr = r.prepareRuntime(ctx, snapshot)
+		return prepErr
+	})
+	applyComponentResult(c, preparation)
 	if err != nil {
-		return err
+		return &componentError{name: "prepare", cause: err}
 	}
-	return runRuntimeComponents(ctx, c, in, r.runtimeComponents())
+	_, err = runRuntimeComponents(ctx, c, in, r.runtimeComponents())
+	return err
 }
 
 // Preparation deliberately handles disabling old controllers before examining
