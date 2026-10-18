@@ -206,13 +206,13 @@ func TestEarlyFailureKeepsObservedWorkloadsForSameGeneration(t *testing.T) {
 
 func TestGatewayBlockedErrorDegradesAndWaitingRemainsProgressing(t *testing.T) {
 	for _, tt := range []struct {
-		name string
-		err error
-		phase bx.BitrixClusterPhase
+		name    string
+		err     error
+		phase   bx.BitrixClusterPhase
 		requeue time.Duration
 	}{
 		{"invalid publication", block("InvalidGateway", "bad listener"), bx.BitrixClusterPhaseDegraded, time.Minute},
-		{"expected stopping", waitFor("CronStopping", "waiting for Pod deletion", 30*time.Second), bx.BitrixClusterPhaseProgressing, 30*time.Second},
+		{"expected stopping", waitFor("CronStopping", "waiting for Pod deletion", 30*time.Second), bx.BitrixClusterPhaseProgressing, 30 * time.Second},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 2}}
