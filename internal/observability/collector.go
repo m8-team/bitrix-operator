@@ -20,23 +20,23 @@ const namespaceLabel = "cluster_namespace"
 // Collector reads a cache snapshot per scrape, including on manager followers.
 // It retains no series after deletion and needs no reconcile to recover on restart.
 type Collector struct {
-	reader                                                       client.Reader
+	reader                                                                                                            client.Reader
 	success, duration, clusterCount, unreadyCount, generation, observed, condition, replicas, siteValidationTimestamp *prometheus.Desc
 }
 
 func NewCollector(reader client.Reader) *Collector {
 	labels := []string{namespaceLabel, clusterLabel}
 	return &Collector{
-		reader:     reader,
-		success:    prometheus.NewDesc("bitrix_operator_collection_success", "Whether the cluster cache was read successfully (1 or 0).", nil, nil),
-		duration:   prometheus.NewDesc("bitrix_operator_collection_duration_seconds", "Time spent collecting the cluster cache snapshot.", nil, nil),
-		clusterCount: prometheus.NewDesc("bitrix_operator_collection_clusters", "Number of active BitrixCluster resources seen in the cache snapshot.", nil, nil),
-		unreadyCount: prometheus.NewDesc("bitrix_operator_collection_unready_clusters", "Number of resources not confirmed Ready for the latest generation.", nil, nil),
+		reader:                  reader,
+		success:                 prometheus.NewDesc("bitrix_operator_collection_success", "Whether the cluster cache was read successfully (1 or 0).", nil, nil),
+		duration:                prometheus.NewDesc("bitrix_operator_collection_duration_seconds", "Time spent collecting the cluster cache snapshot.", nil, nil),
+		clusterCount:            prometheus.NewDesc("bitrix_operator_collection_clusters", "Number of active BitrixCluster resources seen in the cache snapshot.", nil, nil),
+		unreadyCount:            prometheus.NewDesc("bitrix_operator_collection_unready_clusters", "Number of resources not confirmed Ready for the latest generation.", nil, nil),
 		siteValidationTimestamp: prometheus.NewDesc("bitrix_cluster_site_validation_last_success_timestamp_seconds", "Last persisted successful Bitrix site validation timestamp, regardless of current readiness.", labels, nil),
-		generation: prometheus.NewDesc("bitrix_cluster_generation", "Current desired BitrixCluster generation.", labels, nil),
-		observed:   prometheus.NewDesc("bitrix_cluster_observed_generation", "Last persisted observed BitrixCluster generation.", labels, nil),
-		condition:  prometheus.NewDesc("bitrix_cluster_condition", "One-hot condition status; missing or stale conditions are Unknown.", []string{namespaceLabel, clusterLabel, "condition", "status"}, nil),
-		replicas:   prometheus.NewDesc("bitrix_cluster_replicas", "Last persisted workload replica count; consult observed generation for freshness.", []string{namespaceLabel, clusterLabel, "component", "state"}, nil),
+		generation:              prometheus.NewDesc("bitrix_cluster_generation", "Current desired BitrixCluster generation.", labels, nil),
+		observed:                prometheus.NewDesc("bitrix_cluster_observed_generation", "Last persisted observed BitrixCluster generation.", labels, nil),
+		condition:               prometheus.NewDesc("bitrix_cluster_condition", "One-hot condition status; missing or stale conditions are Unknown.", []string{namespaceLabel, clusterLabel, "condition", "status"}, nil),
+		replicas:                prometheus.NewDesc("bitrix_cluster_replicas", "Last persisted workload replica count; consult observed generation for freshness.", []string{namespaceLabel, clusterLabel, "component", "state"}, nil),
 	}
 }
 
