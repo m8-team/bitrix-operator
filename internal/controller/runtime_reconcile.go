@@ -104,7 +104,11 @@ func (r *BitrixClusterReconciler) prepareRuntime(ctx context.Context, c *bx.Bitr
 	if err := validateWorkload(c); err != nil {
 		return nil, err
 	}
-	bundle, err := render.RenderWithPort(c.Spec, r.publicationPort(ctx, c), workload.PushEndpoints(c))
+	port, err := r.publicationPort(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	bundle, err := render.RenderWithPort(c.Spec, port, workload.PushEndpoints(c))
 	if err != nil {
 		return nil, block("InvalidRuntimeConfiguration", err.Error())
 	}
