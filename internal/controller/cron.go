@@ -31,12 +31,15 @@ func (r *BitrixClusterReconciler) reconcileCron(ctx context.Context, c *bx.Bitri
 	}
 	d := &appsv1.Deployment{}
 	if err := r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "cron")}, d); err != nil {
+		condition(c, conditionCronReady, metav1.ConditionUnknown, "ObservationFailed", "Could not read the cron Deployment")
 		return err
 	}
 	rollout := observeDeployment(d, 1)
 	c.Status.Runtime.Cron = rollout.status
 	if rollout.ready && bound {
 		condition(c, "CronReady", metav1.ConditionTrue, "RolloutComplete", "The desired cron replica is ready and uploads storage is bound")
+	} else {
+		condition(c, conditionCronReady, metav1.ConditionFalse, "RolloutPending", "Waiting for the current cron Deployment and uploads storage")
 	}
 	if rollout.deadlineExceeded {
 		return block(progressDeadlineExceeded, "The cron Deployment exceeded its rollout deadline")
