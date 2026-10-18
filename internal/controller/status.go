@@ -20,6 +20,16 @@ func condition(c *bx.BitrixCluster, kind string, status metav1.ConditionStatus, 
 }
 
 func initializeReconcileStatus(c *bx.BitrixCluster) {
+	// A retry of the same spec generation must not erase independent workload
+	// observations before prepare/config/Push can run. Any failure in those
+	// stages still marks the overall Ready condition as false.
+	if c.Status.ObservedGeneration == c.Generation && c.Status.Runtime != nil {
+		c.Status.Phase = bx.BitrixClusterPhaseProgressing
+		return
+	}
+	// A different generation cannot inherit readiness from an older desired spec.
+	// Until a workload is actually observed, Unknown is more accurate than
+	// inventing an in-progress rollout.
 	c.Status.ObservedGeneration = c.Generation
 	c.Status.Phase = bx.BitrixClusterPhaseProgressing
 	c.Status.Release = nil
@@ -30,11 +40,11 @@ func initializeReconcileStatus(c *bx.BitrixCluster) {
 	}
 	condition(c, "Ready", metav1.ConditionFalse, "SiteValidationPending", "Web readiness does not validate Bitrix site IDs; kernel validation is pending")
 	condition(c, conditionSitesValidated, metav1.ConditionUnknown, "ValidationPending", "Waiting for site validation of the current runtime")
-	condition(c, conditionWebReady, metav1.ConditionFalse, "RolloutPending", "Waiting for the desired web rollout")
+	condition(c, conditionWebReady, metav1.ConditionUnknown, "NotObserved", "The web Deployment has not yet been observed for this generation")
 	condition(c, conditionCronReady, metav1.ConditionTrue, "Disabled", "Cron workload is disabled")
 	if c.Spec.Runtime.Cron.Enabled {
 		c.Status.Runtime.Cron.DesiredReplicas = 1
-		condition(c, conditionCronReady, metav1.ConditionFalse, "RolloutPending", "Waiting for the desired cron rollout")
+		condition(c, conditionCronReady, metav1.ConditionUnknown, "NotObserved", "The cron Deployment has not yet been observed for this generation")
 	}
 	condition(c, "AutoscalingReady", metav1.ConditionTrue, "Disabled", "Web autoscaling is disabled")
 	if workload.AutoscalingEnabled(c) {
@@ -144,6 +154,9 @@ func attributeComponentFailure(c *bx.BitrixCluster, err error, issue reconcileFa
 		}
 	}
 	if kind == "" {
+		return
+	}
+	if existing := meta.FindStatusCondition(c.Status.Conditions, kind); existing != nil && existing.Status == metav1.ConditionUnknown && existing.Reason == "ObservationFailed" {
 		return
 	}
 	if existing := meta.FindStatusCondition(c.Status.Conditions, kind); existing != nil && existing.Status == metav1.ConditionTrue && !failedComponent(err, "prepare") {
