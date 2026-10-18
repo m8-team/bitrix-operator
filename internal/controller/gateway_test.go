@@ -85,6 +85,21 @@ var _ = Describe("Gateway publication", func() {
 		Expect(publicationReason(c)).To(Equal("DependencyMissing"))
 		Expect(webDeployment(c)).NotTo(BeNil())
 	})
+	It("retains published routes when runtime reconciliation is blocked", func() {
+		c := reconcileWeb(webSample())
+		gatewaySample(c)
+		reconcilePublished(c)
+		original := siteRoute(c)
+		// Simulate a temporary dependency failure without changing the desired publication.
+		credentials := &corev1.Secret{}
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: c.Spec.License.SecretRef.Name}, credentials)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, credentials)).To(Succeed())
+		reconcilePublished(c)
+		Expect(publicationReason(c)).To(Equal("RuntimeInvalid"))
+		route := siteRoute(c)
+		Expect(route.UID).To(Equal(original.UID))
+		Expect(route.Spec).To(Equal(original.Spec))
+	})
 	It("requires current route and Gateway status before publishing URLs", func() {
 		c := reconcileWeb(webSample())
 		g := gatewaySample(c)

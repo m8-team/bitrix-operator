@@ -23,8 +23,11 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 		return r.pruneRoutes(ctx, c, nil)
 	}
 	if !runtimeValid {
+		// Preserve last-known-good routes during reconciliation failures.
+		// An API outage, SSA conflict or temporarily missing Secret must not
+		// remove ingress for otherwise healthy existing web workloads.
 		condition(c, "GatewayReady", metav1.ConditionFalse, "RuntimeInvalid", "Publication waits for a valid runtime configuration")
-		return r.pruneRoutes(ctx, c, nil)
+		return nil
 	}
 	p, err := r.publication(ctx, c)
 	if err == nil {
