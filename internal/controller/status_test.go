@@ -6,12 +6,11 @@ import (
 	"time"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
-
 func TestStatusInitializationWithoutKubernetes(t *testing.T) {
 	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 7}}
 	c.Spec.Sites = []bx.BitrixSiteSpec{{ID: "store"}}
