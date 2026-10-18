@@ -38,7 +38,10 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 		if issue, ok := errors.AsType[*blocked](err); ok {
 			// A known invalid publication is explicitly withdrawn.
 			condition(c, "GatewayReady", metav1.ConditionFalse, issue.reason, issue.message)
-			return r.pruneRoutes(ctx, c, nil)
+			if cleanupErr := r.pruneRoutes(ctx, c, nil); cleanupErr != nil {
+				return &gatewayCleanupError{reason: issue.reason, message: issue.message, cause: cleanupErr}
+			}
+			return err
 		}
 		// A transient API/transport error must not delete last-known-good routes.
 		return err
@@ -237,19 +240,23 @@ func clusterHasHost(c *bx.BitrixCluster, pattern string) bool {
 
 // The listener port enters the native nginx config, so port changes trigger rollout.
 // Detailed validation/errors are handled by reconcileGateway, independently of web health.
-func (r *BitrixClusterReconciler) publicationPort(ctx context.Context, c *bx.BitrixCluster) int32 {
+func (r *BitrixClusterReconciler) publicationPort(ctx context.Context, c *bx.BitrixCluster) (int32, error) {
 	if !gatewayEnabled(c) || !r.GatewayAPIAvailable || c.Spec.Networking.Gateway.ParentRef == nil {
-		return 0
+		return 0, nil
 	}
 	p := c.Spec.Networking.Gateway.ParentRef
 	g := &gateway.Gateway{}
-	if r.observationReader().Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: p.Name}, g) != nil {
-		return 0
+	if err := r.observationReader().Get(ctx, client.ObjectKey{Namespace: p.Namespace, Name: p.Name}, g); err != nil {
+		// Never render a different nginx config from an unobserved listener.
+		// In particular, a cache/API outage must not start an unrelated rollout.
+		return 0, fmt.Errorf("observe Gateway %s/%s listener %s: %w", p.Namespace, p.Name, p.SectionName, err)
 	}
 	for _, l := range g.Spec.Listeners {
 		if string(l.Name) == p.SectionName {
-			return l.Port
+			return l.Port, nil
 		}
 	}
-	return 0
+	// A missing listener is invalid publication, not a transport error;
+	// reconcileGateway reports the specific reason and withdraws routes.
+	return 0, nil
 }
