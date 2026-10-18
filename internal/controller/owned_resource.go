@@ -2,31 +2,21 @@ package controller
 
 import (
 	"context"
+	"errors"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/m8-team/bitrix-operator/internal/kubeops"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// deleteOwnedResource is the single guarded deletion path for named operator
-// resources. It never adopts foreign objects and never races against a
-// replacement with a different UID or resourceVersion. A true return value
-// means the resource exists (possibly already terminating), so callers that
-// need dependent Pods gone must continue to wait.
+// Preserve the controller's typed domain error, while delegating Kubernetes
+// read/delete mechanics to a small independently testable package.
 func (r *BitrixClusterReconciler) deleteOwnedResource(ctx context.Context, c *bx.BitrixCluster, obj client.Object, foreground bool) (bool, error) {
-	if err := r.reader().Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
-		return false, client.IgnoreNotFound(err)
+	found, err := kubeops.DeleteOwned(ctx, r.reader(), r.Client, obj, func(live client.Object) bool {
+		return controlledByCluster(c, live)
+	}, foreground)
+	if errors.Is(err, kubeops.ErrForeignResource) {
+		return found, block("ResourceCollision", "An application resource is not controlled by this BitrixCluster")
 	}
-	if !controlledByCluster(c, obj) {
-		return true, block("ResourceCollision", "An application resource is not controlled by this BitrixCluster")
-	}
-	if obj.GetDeletionTimestamp() != nil {
-		return true, nil
-	}
-	uid, rv := obj.GetUID(), obj.GetResourceVersion()
-	options := []client.DeleteOption{client.Preconditions{UID: &uid, ResourceVersion: &rv}}
-	if foreground {
-		options = append(options, client.PropagationPolicy(metav1.DeletePropagationForeground))
-	}
-	return true, client.IgnoreNotFound(r.Delete(ctx, obj, options...))
+	return found, err
 }

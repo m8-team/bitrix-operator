@@ -2,6 +2,7 @@ package controller
 
 import (
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
+	"github.com/m8-team/bitrix-operator/internal/kubeops"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,9 +52,5 @@ func observeDeployment(d *appsv1.Deployment, desired int32) deploymentRollout {
 }
 
 func controlledByCluster(c *bx.BitrixCluster, obj metav1.Object) bool {
-	owner := metav1.GetControllerOf(obj)
-	return owner != nil &&
-		owner.UID == c.UID &&
-		owner.Kind == bitrixClusterKind &&
-		owner.APIVersion == bx.GroupVersion.String()
+	return kubeops.ControlledBy(obj, c, bx.GroupVersion.String(), bitrixClusterKind)
 }
