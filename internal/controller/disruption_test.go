@@ -48,7 +48,7 @@ var _ = Describe("Web disruption budget", func() {
 		r := &BitrixClusterReconciler{Client: k8sClient}
 		foreign := workload.DisruptionBudget(c)
 		foreign.OwnerReferences = nil
-		Expect(r.apply(ctx, c, foreign)).To(HaveOccurred())
+		Expect(r.resourceManager().Apply(ctx, c, foreign)).To(HaveOccurred())
 		reconcileWeb(c)
 		Expect(meta.FindStatusCondition(c.Status.Conditions, "Ready").Reason).To(Equal("ResourceCollision"))
 		p := &policyv1.PodDisruptionBudget{}
