@@ -14,7 +14,7 @@ import (
 // future dedicated controllers without changing the global orchestration.
 func (r *BitrixClusterReconciler) reconcileRuntimeConfig(ctx context.Context, c *bx.BitrixCluster, in *runtimeInputs) error {
 	for _, configuration := range workload.ConfigMaps(c, in.desired.bundle) {
-		if err := r.apply(ctx, c, configuration); err != nil {
+		if err := r.resourceManager().Apply(ctx, c, configuration); err != nil {
 			return err
 		}
 	}
@@ -30,7 +30,7 @@ func (r *BitrixClusterReconciler) reconcileRuntimePush(ctx context.Context, c *b
 
 func (r *BitrixClusterReconciler) reconcileRuntimeWeb(ctx context.Context, c *bx.BitrixCluster, in *runtimeInputs) error {
 	for _, obj := range []any{workload.Service(c), workload.DisruptionBudget(c), workload.Deployment(c, in.desired.bundle, in.desired.revision, in.desired.image)} {
-		if err := r.apply(ctx, c, obj); err != nil {
+		if err := r.resourceManager().Apply(ctx, c, obj); err != nil {
 			return err
 		}
 	}

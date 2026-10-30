@@ -118,7 +118,7 @@ func (r *BitrixClusterReconciler) prepareRuntime(ctx context.Context, c *bx.Bitr
 	if err != nil {
 		return nil, err
 	}
-	pvc, err := r.storage(ctx, c)
+	pvc, err := r.resourceManager().Storage(ctx, c)
 	if err != nil {
 		return nil, err
 	}

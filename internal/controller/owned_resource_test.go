@@ -18,14 +18,14 @@ var _ = Describe("Owned resource deletion", func() {
 		c := reconcileWeb(webSample())
 		r := &BitrixClusterReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()}
 		missing := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: c.Namespace, Name: "does-not-exist"}}
-		found, err := r.deleteOwnedResource(ctx, c, missing, false)
+		found, err := r.resourceManager().DeleteOwned(ctx, c, missing, false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(found).To(BeFalse())
 
 		foreign := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: c.Namespace, Name: "foreign-service"},
 			Spec: corev1.ServiceSpec{Ports: []corev1.ServicePort{{Port: 8080}}}}
 		Expect(k8sClient.Create(ctx, foreign)).To(Succeed())
-		found, err = r.deleteOwnedResource(ctx, c, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: c.Namespace, Name: foreign.Name}}, false)
+		found, err = r.resourceManager().DeleteOwned(ctx, c, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: c.Namespace, Name: foreign.Name}}, false)
 		Expect(found).To(BeTrue())
 		var blockedErr *blocked
 		Expect(errors.As(err, &blockedErr)).To(BeTrue())
@@ -43,13 +43,13 @@ var _ = Describe("Owned resource deletion", func() {
 		service.Finalizers = []string{"example.com/hold"}
 		Expect(k8sClient.Update(ctx, service)).To(Succeed())
 
-		found, err := r.deleteOwnedResource(ctx, c, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: c.Namespace, Name: service.Name}}, true)
+		found, err := r.resourceManager().DeleteOwned(ctx, c, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: c.Namespace, Name: service.Name}}, true)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(found).To(BeTrue())
 		current := &corev1.Service{}
 		Expect(k8sClient.Get(ctx, key, current)).To(Succeed())
 		Expect(current.DeletionTimestamp).NotTo(BeNil())
-		found, err = r.deleteOwnedResource(ctx, c, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: c.Namespace, Name: service.Name}}, true)
+		found, err = r.resourceManager().DeleteOwned(ctx, c, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Namespace: c.Namespace, Name: service.Name}}, true)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(found).To(BeTrue())
 		current.Finalizers = nil
@@ -67,7 +67,7 @@ var _ = Describe("Owned resource deletion", func() {
 		wrong.Namespace = c.Namespace
 		wrong.UID = "a-different-cluster"
 		service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: workload.Name(c, "web"), Namespace: c.Namespace}}
-		found, err := r.deleteOwnedResource(ctx, wrong, service, false)
+		found, err := r.resourceManager().DeleteOwned(ctx, wrong, service, false)
 		Expect(found).To(BeTrue())
 		var blockedErr *blocked
 		Expect(errors.As(err, &blockedErr)).To(BeTrue())
