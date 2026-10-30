@@ -139,7 +139,7 @@ var _ = Describe("Gateway publication", func() {
 		}
 		_, err = healthy.reconcileGateway(ctx, c, true)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(replacement), replacement)).To(Succeed())
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: nextName}, replacement)).To(Succeed())
 		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(old), previous))).To(BeTrue())
 	})
 	It("retains the last-known-good HTTPRoute when the Gateway API fails", func() {
