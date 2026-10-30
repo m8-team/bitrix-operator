@@ -18,7 +18,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
@@ -93,7 +95,53 @@ func (r gatewayReadFailure) Get(ctx context.Context, key client.ObjectKey, obj c
 	return r.Reader.Get(ctx, key, obj, opts...)
 }
 
+// Fail the creation of a newly desired route after an older owned route
+// already exists. ResourceManager creates with UID ownership checks before SSA.
+type failingRouteCreateClient struct {
+	client.Client
+	name string
+}
+
+func (f failingRouteCreateClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	if route, ok := obj.(*unstructured.Unstructured); ok && route.GetKind() == "HTTPRoute" && route.GetName() == f.name {
+		return errors.New("simulated HTTPRoute create failure")
+	}
+	return f.Client.Create(ctx, obj, opts...)
+}
+
 var _ = Describe("Gateway publication", func() {
+	It("preserves old routes if replacement creation fails, then prunes after retry", func() {
+		c := reconcileWeb(webSample())
+		gatewaySample(c)
+		reconcilePublished(c)
+		old := siteRoute(c)
+		// Replacing a site ID changes the generated route name. An API error
+		// must not withdraw the existing route before its replacement exists.
+		c.Spec.Sites[0].ID = "replacement"
+		nextName := workload.RouteName(c, "replacement")
+		failing := &BitrixClusterReconciler{
+			Client: failingRouteCreateClient{Client: k8sClient, name: nextName},
+			Scheme: k8sClient.Scheme(), GatewayAPIAvailable: true,
+		}
+		_, err := failing.reconcileGateway(ctx, c, true)
+		Expect(err).To(HaveOccurred())
+		previous := &gateway.HTTPRoute{}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(old), previous)).To(Succeed())
+		Expect(previous.UID).To(Equal(old.UID))
+		replacement := &gateway.HTTPRoute{}
+		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKey{
+			Namespace: c.Namespace, Name: nextName,
+		}, replacement))).To(BeTrue())
+		// A later successful retry completes replacement and only then removes
+		// the obsolete route, even though the Gateway is not yet Programmed.
+		healthy := &BitrixClusterReconciler{
+			Client: k8sClient, Scheme: k8sClient.Scheme(), GatewayAPIAvailable: true,
+		}
+		_, err = healthy.reconcileGateway(ctx, c, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(replacement), replacement)).To(Succeed())
+		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(old), previous))).To(BeTrue())
+	})
 	It("retains the last-known-good HTTPRoute when the Gateway API fails", func() {
 		c := reconcileWeb(webSample())
 		gatewaySample(c)
