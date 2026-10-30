@@ -18,38 +18,39 @@ import (
 const gatewayKind = "Gateway"
 
 // Gateway failures affect publication only; existing internal workloads still reconcile.
-func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.BitrixCluster, runtimeValid bool) error {
+func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.BitrixCluster, runtimeValid bool) (ComponentResult, error) {
+	result := ComponentResult{}
 	if !gatewayEnabled(c) {
 		if err := r.pruneRoutes(ctx, c, nil); err != nil {
-			return err
+			return result, err
 		}
-		clearPublishedSiteURLs(c)
-		return nil
+		clearPublishedSiteURLs(c, &result)
+		return result, nil
 	}
 	if !runtimeValid {
 		// Preserve last-known-good routes during reconciliation failures.
 		// An API outage, SSA conflict or temporarily missing Secret must not
 		// remove ingress for otherwise healthy existing web workloads.
-		condition(c, "GatewayReady", metav1.ConditionFalse, "RuntimeInvalid", "Publication waits for a valid runtime configuration")
-		return nil
+		result.SetCondition(c.Generation, "GatewayReady", metav1.ConditionFalse, "RuntimeInvalid", "Publication waits for a valid runtime configuration")
+		return result, nil
 	}
 	p, err := r.publication(ctx, c)
 	if err == nil {
 		err = r.hostConflicts(ctx, c, p)
 	}
 	if err != nil {
-		condition(c, "GatewayReady", metav1.ConditionFalse, "PublicationFailed", "Could not validate Gateway publication")
+		result.SetCondition(c.Generation, "GatewayReady", metav1.ConditionFalse, "PublicationFailed", "Could not validate Gateway publication")
 		if issue, ok := errors.AsType[*blocked](err); ok {
 			// A known invalid publication is explicitly withdrawn.
-			condition(c, "GatewayReady", metav1.ConditionFalse, issue.reason, issue.message)
+			result.SetCondition(c.Generation, "GatewayReady", metav1.ConditionFalse, issue.reason, issue.message)
 			if cleanupErr := r.pruneRoutes(ctx, c, nil); cleanupErr != nil {
-				return &gatewayCleanupError{reason: issue.reason, message: issue.message, cause: cleanupErr}
+				return result, &gatewayCleanupError{reason: issue.reason, message: issue.message, cause: cleanupErr}
 			}
-			clearPublishedSiteURLs(c)
-			return err
+			clearPublishedSiteURLs(c, &result)
+			return result, err
 		}
 		// A transient API/transport error must not delete last-known-good routes.
-		return err
+		return result, err
 	}
 	desired := desiredRoutes(c)
 	names := make([]string, 0, len(desired))
@@ -57,31 +58,32 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 		names = append(names, route.Name)
 	}
 	if err = r.pruneRoutes(ctx, c, names); err != nil {
-		return err
+		return result, err
 	}
 	ready := gatewayProgrammed(p)
 	for _, route := range desired {
 		if err = r.resourceManager().Apply(ctx, c, route); err != nil {
-			return err
+			return result, err
 		}
 		live := &gateway.HTTPRoute{}
 		if err = r.reader().Get(ctx, client.ObjectKeyFromObject(route), live); err != nil {
-			return err
+			return result, err
 		}
 		if !routeAccepted(live, p, c.Spec.Networking.Gateway.ParentRef) {
 			ready = false
 		}
 	}
 	if !ready {
-		condition(c, "GatewayReady", metav1.ConditionFalse, "RoutePending", "Waiting for current Gateway/listener and HTTPRoute Accepted/ResolvedRefs conditions")
-		return nil
+		result.SetCondition(c.Generation, "GatewayReady", metav1.ConditionFalse, "RoutePending", "Waiting for current Gateway/listener and HTTPRoute Accepted/ResolvedRefs conditions")
+		return result, nil
 	}
-	condition(c, "GatewayReady", metav1.ConditionTrue, "RoutesReady", "The Gateway has accepted all current HTTPRoutes and resolved their references")
+	result.SetCondition(c.Generation, "GatewayReady", metav1.ConditionTrue, "RoutesReady", "The Gateway has accepted all current HTTPRoutes and resolved their references")
 	if meta.IsStatusConditionTrue(c.Status.Conditions, "SitesValidated") && meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") {
+		sites := result.SitesFor(c.Status.Sites)
 		for i, site := range c.Spec.Sites {
 			// A same-generation retry preserves site status, so never append
 			// the same URL a second time to the schema's set-valued field.
-			c.Status.Sites[i].URLs = nil
+			sites[i].URLs = nil
 			scheme, standard := "http", gateway.PortNumber(80)
 			if p.listener.Protocol == gateway.HTTPSProtocolType {
 				scheme, standard = "https", 443
@@ -91,12 +93,12 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 				if p.listener.Port != standard {
 					authority = host + ":" + strconv.Itoa(int(p.listener.Port))
 				}
-				c.Status.Sites[i].URLs = append(c.Status.Sites[i].URLs, scheme+"://"+authority)
+				sites[i].URLs = append(sites[i].URLs, scheme+"://"+authority)
 			}
-			slices.Sort(c.Status.Sites[i].URLs)
+			slices.Sort(sites[i].URLs)
 		}
 	}
-	return nil
+	return result, nil
 }
 
 // clearPublishedSiteURLs removes stale public URL evidence only after the
@@ -104,7 +106,7 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 // failures retain last-known-good routes and URLs.
 func clearPublishedSiteURLs(c *bx.BitrixCluster) {
 	for i := range c.Status.Sites {
-		c.Status.Sites[i].URLs = nil
+		sites[i].URLs = nil
 	}
 }
 

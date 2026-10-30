@@ -103,7 +103,8 @@ var _ = Describe("Gateway publication", func() {
 			Client: k8sClient, Scheme: k8sClient.Scheme(), GatewayAPIAvailable: true,
 			APIReader: gatewayReadFailure{Reader: k8sClient},
 		}
-		Expect(r.reconcileGateway(ctx, c, true)).To(HaveOccurred())
+		_, err := r.reconcileGateway(ctx, c, true)
+		Expect(err).To(HaveOccurred())
 		Expect(siteRoute(c).UID).To(Equal(original.UID))
 	})
 	It("does not require Gateway CRDs for internal workloads", func() {
