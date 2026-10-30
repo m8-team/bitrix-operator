@@ -305,7 +305,7 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 	}
 
 	identity.Attempt = string(job.UID)
-	result, complete, err := r.siteResult(ctx, c, job, identity, requested)
+	validationResult, complete, err := r.siteResult(ctx, c, job, identity, requested)
 	if err != nil {
 		return result, err
 	}
@@ -316,10 +316,10 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 	// Keep failed Jobs for five minutes, including failed refresh attempts,
 	// so a transient DB/Bitrix failure is retried without reconciling in a loop.
 	completedAt := siteValidationCompletedAt(job)
-	retryExpired := result.Reason != sitesValidated && time.Since(completedAt.Time) >= 5*time.Minute
+	retryExpired := validationResult.Reason != sitesValidated && time.Since(completedAt.Time) >= 5*time.Minute
 	status := metav1.ConditionFalse
 	message := "The Bitrix kernel could not validate the requested sites; retrying within five minutes"
-	if result.Reason == sitesValidated {
+	if validationResult.Reason == sitesValidated {
 		status = metav1.ConditionTrue
 		message = "All requested site IDs exist in the Bitrix kernel"
 		result.SiteValidation = &bx.SiteValidationStatus{
@@ -329,17 +329,17 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 		}
 		result.SiteValidationChanged = true
 	}
-	if result.Reason == "SiteNotFound" {
+	if validationResult.Reason == "SiteNotFound" {
 		message = "One or more requested site IDs do not exist in the Bitrix kernel"
 	}
-	result.SetCondition(c.Generation, conditionSitesValidated, status, result.Reason, message)
+	result.SetCondition(c.Generation, conditionSitesValidated, status, validationResult.Reason, message)
 	for i := range result.SitesFor(c.Status.Sites) {
 		site := &result.Sites[i]
-		site.Exists = slices.Contains(result.Sites, site.ID)
+		site.Exists = slices.Contains(validationResult.Sites, site.ID)
 		site.Message = "Site existence could not be confirmed"
 		if site.Exists {
 			site.Message = "Site ID exists in the Bitrix kernel"
-		} else if result.Reason == "SiteNotFound" {
+		} else if validationResult.Reason == "SiteNotFound" {
 			site.Message = "Site ID does not exist in the Bitrix kernel"
 		}
 	}
