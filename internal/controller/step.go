@@ -14,9 +14,11 @@ type StepResult struct {
 	Blocked      bool
 }
 
-func StepContinue() StepResult { return StepResult{} }
+func StepContinue() StepResult                   { return StepResult{} }
 func StepRequeue(after time.Duration) StepResult { return StepResult{RequeueAfter: after} }
-func StepBlocked(after time.Duration) StepResult { return StepResult{RequeueAfter: after, Blocked: true} }
+func StepBlocked(after time.Duration) StepResult {
+	return StepResult{RequeueAfter: after, Blocked: true}
+}
 
 // ReconcileStep is a named stage returning isolated observations.
 // The runner, not the stage, applies these observations to status.

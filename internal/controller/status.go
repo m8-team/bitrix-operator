@@ -187,4 +187,3 @@ func preserveConditionTransitions(before, c *bx.BitrixCluster) {
 		}
 	}
 }
-
