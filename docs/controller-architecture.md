@@ -140,3 +140,27 @@ always regenerates desired state from the CR and the actual Kubernetes
 objects. Successful prior applies are idempotent, and a retry may resume
 after fixing a foreign-object collision or recreating a required dependency,
 without re-creating retained PVCs or adopting unrelated objects.
+
+## ClickHouse-inspired reconciliation primitives
+
+Three explicitly named primitives now organize lifecycle operations without changing
+the `BitrixCluster` API or relaxing the existing safety invariants:
+
+- **ReconcileStep** (`step.go`) executes named stages in order. `StepBlocked`
+  skips dependent stages and permits independent `Always` observations;
+  unexpected errors still short-circuit. `runRuntimeComponents` adapts the
+  seven established runtime stages to this runner, retaining isolated
+  `ComponentResult` deltas, stage metrics, and partial observations.
+- **StatusManager** (`statusmanager.go`) owns the reconcile snapshot,
+  readiness policy, optimistic status patch, and post-persistence Events.
+  Stage code still creates `ComponentResult` observations, not direct status
+  subresource mutations.
+- **ResourceManager** (`resourcemanager.go`) owns Kubernetes SSA and retained
+  PVC mutation. It deliberately keeps owner UID checks, create-before-apply,
+  managedFields migration, HPA replica handoff, and resourceVersion guards
+  rather than copying ClickHouse's spec-hash/Update strategy.
+
+The existing `r.apply`/`r.storage` methods remain compatibility delegates,
+so component builders do not require a breaking rewrite. The new step API
+supports future independent observations without making the current
+reconciliation graph concurrent.
