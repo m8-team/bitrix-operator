@@ -74,20 +74,17 @@ framework or global mutable state merely to add a runtime component.
 
 ## P1: component observations and error policy
 
-Every runtime stage implements `runtimeComponent.Reconcile(...)` and returns a
-`ComponentResult` plus an error. The ConfigMaps, Web apply and ConfigMap GC
-stages return results directly and reject any accidental shared status mutation.
-Statusful legacy stages still use `captureComponentResult` on an isolated
-BitrixCluster snapshot. The shared `StatusManager` applies only reported
-Condition, runtime, release and site deltas, including observations made before
-an error. Neither kind of stage writes the status subresource directly.
+Runtime stages return explicit `ComponentResult` observations. `applyOnlyStep`
+and `observedStep` enforce that no stage modifies shared status directly;
+`StatusManager` merges only the reported Conditions and runtime/release/site
+deltas. Preparation, Sites and Gateway also emit scoped results directly,
+including observations made before an error. There is no full-CR snapshot
+diffing compatibility adapter.
 
-`StatusReady` (the `Ready` Condition) and `Phase` represent overall health;
-component Conditions represent observed component health. A failure attributed
-to `config-gc` does not reset a confirmed `WebReady=True` or
-`SitesValidated=True`. Similarly, Gateway failures do not reset observed
-internal runtime readiness. If the GC stage fails *after* completing the runtime
-pipeline, Gateway still reconciles (subject to its own dependency checks).
+`Ready` and `Phase` represent overall health; component Conditions report
+independent observations. A late `config-gc` failure cannot erase
+`WebReady=True` or `SitesValidated=True`, and Gateway publication failures
+cannot erase observed internal runtime readiness.
 
 Reconcile errors have three dispositions:
 
@@ -162,34 +159,19 @@ Component implementations call ResourceManager directly for SSA, PVC and
 UID-guarded deletion. The new step API supports future independent observations
 without making the current reconciliation graph concurrent.
 
-## Incremental adapter removal
+## Direct component results
 
-StatusManager is passed through the entire runtime pipeline and is the only
-path used to aggregate stage observations. ResourceManager is called directly
-for Kubernetes apply, retained PVC storage and UID-guarded deletion. The old
-`r.apply`, `r.storage`, `r.deleteOwnedResource` and
-`applyComponentResult` wrappers are removed.
+`ResourceManager` owns SSA, PVC and UID-guarded deletion. `StatusManager`
+owns status aggregation and persistence. Each `ReconcileStep` returns a
+`ComponentResult` with explicit changed flags, and the runner applies
+partial observations before reporting a failure.
 
-The ConfigMaps, Web resource apply and ConfigMap GC stages now return
-`ComponentResult` directly through `applyOnlyStep`, preserving stage
-metrics and failing if they accidentally mutate the shared status. More
-complex stages (Push, Cron, Web observation, Sites, Gateway and preparation)
-continue to use the isolated `captureComponentResult` bridge until their
-Condition/runtime/site observations can be migrated individually with
-dedicated regression tests. This avoids weakening evidence-based readiness
-during the transition.
+Config/Web apply/ConfigMap GC are `applyOnlyStep` stages. Cron, Push, Web
+observation/HPA and Sites are `observedStep` stages. Gateway is guarded
+by the same `observedStep` contract. Preparation produces a direct result
+with cleanup observations even if subsequent validation fails.
 
-## Direct rollout observations
-
-Cron, Push, Web Deployment observation and HPA now return scoped
-`ComponentResult` values directly. Stage conditions use
-`ComponentResult.SetCondition`, and `RuntimeFor` clones observed workload
-status before applying a single workload's update. In particular, a successfully
-observed Push publisher remains in the result if the subsequent subscriber
-operation fails. A failed HPA check cannot erase the separately observed Web
-rollout, and the stage runner reports the original underlying error.
-
-The `observedStep` adapter records metrics and checks that statusful stages
-never mutate the shared BitrixCluster status. The remaining snapshot bridge is
-limited to preparation, Sites and Gateway publication because these still
-include multi-field status and evidence transitions.
+Site validation preserves bounded proof TTL, max staleness and refresh
+failure semantics. Gateway only withdraws routes after an explicit invalid
+publication decision; temporary API errors retain last-known-good routes.
+Neither controller mutates the shared status without `StatusManager`.

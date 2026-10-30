@@ -53,18 +53,6 @@ type runtimeComponent interface {
 	Reconcile(context.Context, *bx.BitrixCluster, *runtimeInputs) (ComponentResult, error)
 }
 
-type componentStep struct {
-	name string
-	run  func(context.Context, *bx.BitrixCluster, *runtimeInputs) error
-}
-
-func (s componentStep) Name() string { return s.name }
-func (s componentStep) Reconcile(ctx context.Context, c *bx.BitrixCluster, in *runtimeInputs) (ComponentResult, error) {
-	return captureComponentResult(s.name, c, func(snapshot *bx.BitrixCluster) error {
-		return s.run(ctx, snapshot, in)
-	})
-}
-
 // applyOnlyStep is for stages that only change Kubernetes resources. It emits
 // a ComponentResult directly, without capturing a deep copy of the whole CR.
 // An accidental status mutation is reverted rather than leaking around

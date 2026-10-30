@@ -31,9 +31,9 @@ func TestRuntimeComponentsAreIndependentlyInjectable(t *testing.T) {
 	stop := errors.New("component unavailable")
 	run := []string{}
 	makeStep := func(name string, err error) runtimeComponent {
-		return componentStep{name: name, run: func(_ context.Context, _ *bx.BitrixCluster, _ *runtimeInputs) error {
+		return observedStep{name: name, run: func(_ context.Context, _ *bx.BitrixCluster, _ *runtimeInputs) (ComponentResult, error) {
 			run = append(run, name)
-			return err
+			return ComponentResult{}, err
 		}}
 	}
 	components := []runtimeComponent{makeStep("storage", nil), makeStep("web", stop), makeStep("sites", nil)}
@@ -56,9 +56,9 @@ func TestRuntimeComponentsHonorCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	called := false
-	c := componentStep{name: "unreachable", run: func(context.Context, *bx.BitrixCluster, *runtimeInputs) error {
+	c := observedStep{name: "unreachable", run: func(context.Context, *bx.BitrixCluster, *runtimeInputs) (ComponentResult, error) {
 		called = true
-		return nil
+		return ComponentResult{}, nil
 	}}
 	if _, err := runRuntimeComponents(ctx, &StatusManager{cluster: &bx.BitrixCluster{}}, &runtimeInputs{}, []runtimeComponent{c}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected cancellation, got %v", err)
@@ -73,14 +73,16 @@ func TestRuntimeComponentsAggregateResultsOnPartialFailure(t *testing.T) {
 	c := &bx.BitrixCluster{}
 	initializeReconcileStatus(c)
 	components := []runtimeComponent{
-		componentStep{name: "web-status", run: func(_ context.Context, observed *bx.BitrixCluster, _ *runtimeInputs) error {
-			condition(observed, "WebReady", metav1.ConditionTrue, "RolloutComplete", "web is ready")
-			return nil
+		observedStep{name: "web-status", run: func(_ context.Context, observed *bx.BitrixCluster, _ *runtimeInputs) (ComponentResult, error) {
+			result := ComponentResult{}
+			result.SetCondition(observed.Generation, "WebReady", metav1.ConditionTrue, "RolloutComplete", "web is ready")
+			return result, nil
 		}},
-		componentStep{name: "config-gc", run: func(_ context.Context, observed *bx.BitrixCluster, _ *runtimeInputs) error {
+		observedStep{name: "config-gc", run: func(_ context.Context, observed *bx.BitrixCluster, _ *runtimeInputs) (ComponentResult, error) {
 			// A failing component must not overwrite the preceding observation.
-			condition(observed, "StorageReady", metav1.ConditionTrue, "VolumeBound", "storage is ready")
-			return failed
+			result := ComponentResult{}
+			result.SetCondition(observed.Generation, "StorageReady", metav1.ConditionTrue, "VolumeBound", "storage is ready")
+			return result, failed
 		}},
 	}
 	results, err := runRuntimeComponents(context.Background(), &StatusManager{cluster: c}, &runtimeInputs{}, components)
@@ -105,12 +107,13 @@ func TestRuntimeComponentsAggregateResultsOnPartialFailure(t *testing.T) {
 	}
 }
 
-func TestComponentStepDoesNotMutateSharedStatus(t *testing.T) {
+func TestObservedStepDoesNotMutateSharedStatus(t *testing.T) {
 	c := &bx.BitrixCluster{}
 	initializeReconcileStatus(c)
-	step := componentStep{name: "web-status", run: func(_ context.Context, isolated *bx.BitrixCluster, _ *runtimeInputs) error {
-		condition(isolated, "WebReady", metav1.ConditionTrue, "RolloutComplete", "ready")
-		return nil
+	step := observedStep{name: "web-status", run: func(_ context.Context, isolated *bx.BitrixCluster, _ *runtimeInputs) (ComponentResult, error) {
+		result := ComponentResult{}
+		result.SetCondition(isolated.Generation, "WebReady", metav1.ConditionTrue, "RolloutComplete", "ready")
+		return result, nil
 	}}
 	observation, err := step.Reconcile(context.Background(), c, &runtimeInputs{})
 	if err != nil {
@@ -128,7 +131,7 @@ func TestComponentStepDoesNotMutateSharedStatus(t *testing.T) {
 func TestComponentAppliedStateIsDistinctFromObservedReadiness(t *testing.T) {
 	c := &bx.BitrixCluster{}
 	initializeReconcileStatus(c)
-	step := componentStep{name: stageWeb, run: func(_ context.Context, snapshot *bx.BitrixCluster, _ *runtimeInputs) error {
+	step := applyOnlyStep{name: stageWeb, run: func(_ context.Context, snapshot *bx.BitrixCluster, _ *runtimeInputs) error {
 		// Applying a Deployment does not mean the Deployment controller has
 		// observed the generation or made the workload ready.
 		return nil
@@ -141,9 +144,10 @@ func TestComponentAppliedStateIsDistinctFromObservedReadiness(t *testing.T) {
 		t.Fatal("an applied spec is not an observed ready Deployment")
 	}
 	failure := errors.New("Kubernetes API temporarily unavailable")
-	failedStep := componentStep{name: "config-gc", run: func(_ context.Context, snapshot *bx.BitrixCluster, _ *runtimeInputs) error {
-		condition(snapshot, "StorageReady", metav1.ConditionTrue, "VolumeBound", "bound")
-		return failure
+	failedStep := observedStep{name: "config-gc", run: func(_ context.Context, snapshot *bx.BitrixCluster, _ *runtimeInputs) (ComponentResult, error) {
+		result := ComponentResult{}
+		result.SetCondition(snapshot.Generation, "StorageReady", metav1.ConditionTrue, "VolumeBound", "bound")
+		return result, failure
 	}}
 	result, err = failedStep.Reconcile(context.Background(), c, &runtimeInputs{})
 	if !errors.Is(err, failure) || result.Applied {
