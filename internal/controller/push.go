@@ -71,11 +71,11 @@ func (r *BitrixClusterReconciler) reconcilePush(ctx context.Context, c *bx.Bitri
 }
 
 // Cleanup precedes Secret/config validation and preserves ingress restrictions until Pods terminate.
-func (r *BitrixClusterReconciler) deletePush(ctx context.Context, c *bx.BitrixCluster) error {
+func (r *BitrixClusterReconciler) deletePush(ctx context.Context, c *bx.BitrixCluster, result *ComponentResult) error {
 	pending := false
 	for _, role := range []string{pushPublisher, pushSubscriber} {
 		d := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: workload.Name(c, "push-"+role), Namespace: c.Namespace}}
-		found, err := r.deletePushObject(ctx, c, d, true)
+		found, err := r.deletePushObject(ctx, c, d, true, result)
 		if err != nil {
 			return err
 		}
@@ -87,7 +87,7 @@ func (r *BitrixClusterReconciler) deletePush(ctx context.Context, c *bx.BitrixCl
 	for _, role := range []string{pushPublisher, pushSubscriber} {
 		m := metav1.ObjectMeta{Name: workload.Name(c, "push-"+role), Namespace: c.Namespace}
 		for _, obj := range []client.Object{&corev1.Service{ObjectMeta: m}, &networkingv1.NetworkPolicy{ObjectMeta: m}} {
-			if _, err := r.deletePushObject(ctx, c, obj, false); err != nil {
+			if _, err := r.deletePushObject(ctx, c, obj, false, result); err != nil {
 				return err
 			}
 		}
@@ -95,13 +95,13 @@ func (r *BitrixClusterReconciler) deletePush(ctx context.Context, c *bx.BitrixCl
 	return nil
 }
 
-func (r *BitrixClusterReconciler) deletePushObject(ctx context.Context, c *bx.BitrixCluster, obj client.Object, foreground bool) (bool, error) {
+func (r *BitrixClusterReconciler) deletePushObject(ctx context.Context, c *bx.BitrixCluster, obj client.Object, foreground bool, result *ComponentResult) (bool, error) {
 	found, err := r.resourceManager().DeleteOwned(ctx, c, obj, foreground)
 	if err != nil {
 		if collision, ok := errors.AsType[*blocked](err); ok {
-			condition(c, "PushReady", metav1.ConditionFalse, collision.reason, collision.message)
+			result.SetCondition(c.Generation, conditionPushReady, metav1.ConditionFalse, collision.reason, collision.message)
 		} else {
-			condition(c, "PushReady", metav1.ConditionFalse, "CleanupFailed", "Could not inspect or delete an owned Push resource")
+			result.SetCondition(c.Generation, conditionPushReady, metav1.ConditionFalse, "CleanupFailed", "Could not inspect or delete an owned Push resource")
 		}
 	}
 	return found, err
