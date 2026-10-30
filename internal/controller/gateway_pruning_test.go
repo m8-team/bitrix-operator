@@ -6,6 +6,11 @@ import (
 	gateway "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+const (
+	overlapHost = "portal.example.com"
+	overlapWildcard = "*.example.com"
+)
+
 func TestRouteOverlapsHostnames(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -13,13 +18,13 @@ func TestRouteOverlapsHostnames(t *testing.T) {
 		pending []gateway.Hostname
 		want    bool
 	}{
-		{name: "same hostname", current: []gateway.Hostname{"portal.example.com"}, pending: []gateway.Hostname{"portal.example.com"}, want: true},
+		{name: "same hostname", current: []gateway.Hostname{overlapHost}, pending: []gateway.Hostname{overlapHost}, want: true},
 		{name: "removed hostname", current: []gateway.Hostname{"old.example.com"}, pending: []gateway.Hostname{"new.example.com"}},
-		{name: "wildcard old route", current: []gateway.Hostname{"*.example.com"}, pending: []gateway.Hostname{"portal.example.com"}, want: true},
-		{name: "wildcard new route", current: []gateway.Hostname{"portal.example.com"}, pending: []gateway.Hostname{"*.example.com"}, want: true},
-		{name: "different domains", current: []gateway.Hostname{"*.example.com"}, pending: []gateway.Hostname{"portal.example.net"}},
-		{name: "old route matching all hosts", pending: []gateway.Hostname{"portal.example.com"}, want: true},
-		{name: "no desired replacement hosts", current: []gateway.Hostname{"portal.example.com"}},
+		{name: "wildcard old route", current: []gateway.Hostname{overlapWildcard}, pending: []gateway.Hostname{overlapHost}, want: true},
+		{name: "wildcard new route", current: []gateway.Hostname{overlapHost}, pending: []gateway.Hostname{overlapWildcard}, want: true},
+		{name: "different domains", current: []gateway.Hostname{overlapWildcard}, pending: []gateway.Hostname{"portal.example.net"}},
+		{name: "old route matching all hosts", pending: []gateway.Hostname{overlapHost}, want: true},
+		{name: "no desired replacement hosts", current: []gateway.Hostname{overlapHost}},
 		{name: "empty prior and desired", want: false},
 	}
 	for _, tc := range tests {
