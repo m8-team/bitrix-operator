@@ -54,6 +54,19 @@ func (result *ComponentResult) RuntimeFor(previous *bx.RuntimeStatus) *bx.Runtim
 	return result.Runtime
 }
 
+// SitesFor returns a private copy of site status, including per-site URLs.
+// StatusManager merges this isolated result only after the stage completes.
+func (result *ComponentResult) SitesFor(previous []bx.BitrixSiteStatus) []bx.BitrixSiteStatus {
+	if !result.SitesChanged {
+		result.Sites = make([]bx.BitrixSiteStatus, len(previous))
+		for i := range previous {
+			result.Sites[i] = *previous[i].DeepCopy()
+		}
+		result.SitesChanged = true
+	}
+	return result.Sites
+}
+
 // captureComponentResult isolates older component implementations that still
 // use condition(c, ...) internally. They can be migrated to construct results
 // directly without changing orchestration or their Kubernetes operations.

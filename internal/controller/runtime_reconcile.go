@@ -193,7 +193,7 @@ func (r *BitrixClusterReconciler) runtimeComponents() []runtimeComponent {
 		applyOnlyStep{name: stageWeb, run: r.reconcileRuntimeWeb},
 		observedStep{name: stageCron, run: r.reconcileRuntimeCron},
 		observedStep{name: stageWebStatus, run: r.observeRuntimeWeb},
-		componentStep{name: stageSites, run: r.reconcileRuntimeSites},
+		observedStep{name: stageSites, run: r.reconcileRuntimeSites},
 		applyOnlyStep{name: "config-gc", run: r.reconcileRuntimeConfigGC},
 	}
 }

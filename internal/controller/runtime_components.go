@@ -73,7 +73,7 @@ func (r *BitrixClusterReconciler) observeRuntimeWeb(ctx context.Context, c *bx.B
 	return result, nil
 }
 
-func (r *BitrixClusterReconciler) reconcileRuntimeSites(ctx context.Context, c *bx.BitrixCluster, in *runtimeInputs) error {
+func (r *BitrixClusterReconciler) reconcileRuntimeSites(ctx context.Context, c *bx.BitrixCluster, in *runtimeInputs) (ComponentResult, error) {
 	return r.reconcileSites(ctx, c, in.desired.bundle, in.desired.revision, in.desired.image)
 }
 
