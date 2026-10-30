@@ -5,6 +5,11 @@ set -Eeuo pipefail
 tmp_gateway=$(mktemp -d)
 forward_pid=''
 cleanup_gateway() {
+    # A failed E2E assertion must not leave the traffic sampler running.
+    if [ -n "${handoff_sampler_pid:-}" ]; then
+        kill "$handoff_sampler_pid" 2>/dev/null || true
+        wait "$handoff_sampler_pid" 2>/dev/null || true
+    fi
     if [ -n "$forward_pid" ]; then kill "$forward_pid" 2>/dev/null || true; fi
     rm -rf "$tmp_gateway"
 }
