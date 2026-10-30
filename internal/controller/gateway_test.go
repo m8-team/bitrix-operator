@@ -95,6 +95,8 @@ func (r gatewayReadFailure) Get(ctx context.Context, key client.ObjectKey, obj c
 	return r.Reader.Get(ctx, key, obj, opts...)
 }
 
+const replacementSiteID = replacementSiteID
+
 // Fail the creation of a newly desired route after an older owned route
 // already exists. ResourceManager creates with UID ownership checks before SSA.
 type failingRouteCreateClient struct {
@@ -131,8 +133,8 @@ var _ = Describe("Gateway publication", func() {
 		old := siteRoute(c)
 		// Replacing a site ID changes the generated route name. An API error
 		// must not withdraw the existing route before its replacement exists.
-		c.Spec.Sites[0].ID = "replacement"
-		nextName := workload.RouteName(c, "replacement")
+		c.Spec.Sites[0].ID = replacementSiteID
+		nextName := workload.RouteName(c, replacementSiteID)
 		failing := &BitrixClusterReconciler{
 			Client: failingRouteCreateClient{Client: k8sClient, name: nextName},
 			Scheme: k8sClient.Scheme(), GatewayAPIAvailable: true,
@@ -161,8 +163,8 @@ var _ = Describe("Gateway publication", func() {
 		gatewaySample(c)
 		reconcilePublished(c)
 		old := siteRoute(c)
-		c.Spec.Sites[0].ID = "replacement"
-		nextName := workload.RouteName(c, "replacement")
+		c.Spec.Sites[0].ID = replacementSiteID
+		nextName := workload.RouteName(c, replacementSiteID)
 		failing := &BitrixClusterReconciler{
 			Client: k8sClient, Scheme: k8sClient.Scheme(), GatewayAPIAvailable: true,
 			APIReader: failingRouteObservationReader{Reader: k8sClient, name: nextName},
