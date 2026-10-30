@@ -109,6 +109,20 @@ func (f failingRouteCreateClient) Create(ctx context.Context, obj client.Object,
 	return f.Client.Create(ctx, obj, opts...)
 }
 
+// The route can be created successfully but its mandatory read-after-write
+// observation can fail. Obsolete routes must remain until the next retry.
+type failingRouteObservationReader struct {
+	client.Reader
+	name string
+}
+
+func (f failingRouteObservationReader) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if _, ok := obj.(*gateway.HTTPRoute); ok && key.Name == f.name {
+		return errors.New("simulated HTTPRoute read-after-write failure")
+	}
+	return f.Reader.Get(ctx, key, obj, opts...)
+}
+
 var _ = Describe("Gateway publication", func() {
 	It("preserves old routes if replacement creation fails, then prunes after retry", func() {
 		c := reconcileWeb(webSample())
@@ -140,6 +154,32 @@ var _ = Describe("Gateway publication", func() {
 		_, err = healthy.reconcileGateway(ctx, c, true)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: nextName}, replacement)).To(Succeed())
+		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(old), previous))).To(BeTrue())
+	})
+	It("keeps last-known-good routes if replacement observation fails after apply", func() {
+		c := reconcileWeb(webSample())
+		gatewaySample(c)
+		reconcilePublished(c)
+		old := siteRoute(c)
+		c.Spec.Sites[0].ID = "replacement"
+		nextName := workload.RouteName(c, "replacement")
+		failing := &BitrixClusterReconciler{
+			Client: k8sClient, Scheme: k8sClient.Scheme(), GatewayAPIAvailable: true,
+			APIReader: failingRouteObservationReader{Reader: k8sClient, name: nextName},
+		}
+		_, err := failing.reconcileGateway(ctx, c, true)
+		Expect(err).To(HaveOccurred())
+		previous := &gateway.HTTPRoute{}
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(old), previous)).To(Succeed())
+		Expect(previous.UID).To(Equal(old.UID))
+		// The replacement was created, but its health could not yet be read.
+		newRoute := &gateway.HTTPRoute{}
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: nextName}, newRoute)).To(Succeed())
+		healthy := &BitrixClusterReconciler{
+			Client: k8sClient, Scheme: k8sClient.Scheme(), GatewayAPIAvailable: true,
+		}
+		_, err = healthy.reconcileGateway(ctx, c, true)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(old), previous))).To(BeTrue())
 	})
 	It("retains the last-known-good HTTPRoute when the Gateway API fails", func() {
