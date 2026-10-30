@@ -56,9 +56,11 @@ func (result *ComponentResult) RuntimeFor(previous *bx.RuntimeStatus) *bx.Runtim
 // StatusManager merges this isolated result only after the stage completes.
 func (result *ComponentResult) SitesFor(previous []bx.BitrixSiteStatus) []bx.BitrixSiteStatus {
 	if !result.SitesChanged {
-		result.Sites = make([]bx.BitrixSiteStatus, len(previous))
-		for i := range previous {
-			result.Sites[i] = *previous[i].DeepCopy()
+		if previous != nil {
+			result.Sites = make([]bx.BitrixSiteStatus, len(previous))
+			for i := range previous {
+				result.Sites[i] = *previous[i].DeepCopy()
+			}
 		}
 		result.SitesChanged = true
 	}
