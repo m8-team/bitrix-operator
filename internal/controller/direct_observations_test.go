@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -111,5 +112,31 @@ func TestPreparationPreservesSuccessfulCleanupWhenValidationFails(t *testing.T) 
 	}
 	if c.Status.Runtime.Cron.ReadyReplicas != 0 || c.Status.Runtime.PushPublisher.ReadyReplicas != 0 {
 		t.Fatalf("cleanup failed to clear old disabled workload observations: %+v", c.Status.Runtime)
+	}
+}
+
+func TestPreparationFailureIsAttributedAndRetainsCleanupConditions(t *testing.T) {
+	scheme := runtime.NewScheme()
+	for _, register := range []func(*runtime.Scheme) error{
+		appsv1.AddToScheme, autoscalingv2.AddToScheme, corev1.AddToScheme, networkingv1.AddToScheme,
+	} {
+		if err := register(scheme); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := &BitrixClusterReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).Build()}
+	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Name: "portal", Namespace: "tenant", Generation: 8}}
+	status := NewStatusManager(r, c)
+	status.Begin()
+	err := r.reconcileResources(context.Background(), status)
+	var failed *componentError
+	if !errors.As(err, &failed) || failed.name != stagePrepare {
+		t.Fatalf("preparation failure was not attributed: %v", err)
+	}
+	for _, kind := range []string{"AutoscalingReady", conditionCronReady, conditionPushReady} {
+		got := meta.FindStatusCondition(c.Status.Conditions, kind)
+		if got == nil || got.Status != metav1.ConditionTrue || got.Reason != "Disabled" {
+			t.Fatalf("cleanup observation lost after preparation failure: %s: %+v", kind, got)
+		}
 	}
 }

@@ -15,6 +15,8 @@ import (
 )
 
 const (
+	stagePrepare            = "prepare"
+	stageGateway            = "gateway"
 	stagePush               = "push"
 	stageWeb                = "web"
 	stageCron               = "cron"
@@ -126,10 +128,11 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, status
 		c.Status = *before
 		err = errors.Join(err, fmt.Errorf("preparation mutated shared BitrixCluster status"))
 	}
-	recordStageMetrics("prepare", err, time.Since(start))
+	recordStageMetrics(stagePrepare, err, time.Since(start))
+	preparation.Applied = err == nil
 	status.Apply(preparation)
 	if err != nil {
-		return &componentError{name: "prepare", cause: err}
+		return &componentError{name: stagePrepare, cause: err}
 	}
 	_, err = runRuntimeComponents(ctx, status, in, r.runtimeComponents())
 	return err
@@ -140,7 +143,7 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, status
 // Each completed cleanup contributes to a direct observation, even if a later
 // validation or Kubernetes API call fails.
 func (r *BitrixClusterReconciler) prepareRuntime(ctx context.Context, c *bx.BitrixCluster) (*runtimeInputs, ComponentResult, error) {
-	result := ComponentResult{Name: "prepare"}
+	result := ComponentResult{Name: stagePrepare}
 	if err := r.deleteDisabledRuntime(ctx, c, &result); err != nil {
 		return nil, result, err
 	}

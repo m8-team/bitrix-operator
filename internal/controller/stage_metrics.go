@@ -59,7 +59,7 @@ func recordReconcileOutcome(c *bx.BitrixCluster, err error) {
 
 func boundedStageName(name string) string {
 	switch name {
-	case "prepare", "config", "push", "web", "cron", "web-status", "sites", "config-gc", "gateway":
+	case stagePrepare, "config", stagePush, stageWeb, stageCron, stageWebStatus, stageSites, "config-gc", stageGateway:
 		return name
 	default:
 		return "other"
@@ -70,7 +70,7 @@ func stageOutcome(name string, err error) string {
 	if err == nil {
 		return "success"
 	}
-	return string(classifyReconcileError(err, name == "gateway").disposition)
+	return string(classifyReconcileError(err, name == stageGateway).disposition)
 }
 
 func recordStageMetrics(name string, err error, elapsed time.Duration) {
