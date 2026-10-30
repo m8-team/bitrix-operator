@@ -119,8 +119,13 @@ func runRuntimeComponents(ctx context.Context, status *StatusManager, in *runtim
 
 func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, status *StatusManager) error {
 	c := status.cluster
+	before := c.Status.DeepCopy()
 	start := time.Now()
 	in, preparation, err := r.prepareRuntime(ctx, c)
+	if !reflect.DeepEqual(c.Status, *before) {
+		c.Status = *before
+		err = errors.Join(err, fmt.Errorf("preparation mutated shared BitrixCluster status"))
+	}
 	recordStageMetrics("prepare", err, time.Since(start))
 	status.Apply(preparation)
 	if err != nil {
