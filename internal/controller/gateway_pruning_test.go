@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	overlapHost = "portal.example.com"
+	overlapHost     = "portal.example.com"
 	overlapWildcard = "*.example.com"
 )
 
