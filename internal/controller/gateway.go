@@ -61,7 +61,7 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 	}
 	ready := gatewayProgrammed(p)
 	for _, route := range desired {
-		if err = r.apply(ctx, c, route); err != nil {
+		if err = r.resourceManager().Apply(ctx, c, route); err != nil {
 			return err
 		}
 		live := &gateway.HTTPRoute{}

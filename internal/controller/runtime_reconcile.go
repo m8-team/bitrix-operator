@@ -2,6 +2,10 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"reflect"
+	"time"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
 	render "github.com/m8-team/bitrix-operator/internal/runtime"
@@ -61,9 +65,33 @@ func (s componentStep) Reconcile(ctx context.Context, c *bx.BitrixCluster, in *r
 	})
 }
 
+// applyOnlyStep is for stages that only change Kubernetes resources. It emits
+// a ComponentResult directly, without capturing a deep copy of the whole CR.
+// An accidental status mutation is reverted rather than leaking around
+// StatusManager's observation boundary.
+type applyOnlyStep struct {
+	name string
+	run  func(context.Context, *bx.BitrixCluster, *runtimeInputs) error
+}
+
+func (s applyOnlyStep) Name() string { return s.name }
+
+func (s applyOnlyStep) Reconcile(ctx context.Context, c *bx.BitrixCluster, in *runtimeInputs) (ComponentResult, error) {
+	before := c.Status.DeepCopy()
+	start := time.Now()
+	err := s.run(ctx, c, in)
+	if !reflect.DeepEqual(c.Status, *before) {
+		c.Status = *before
+		err = errors.Join(err, fmt.Errorf("apply-only stage %s changed BitrixCluster status", s.name))
+	}
+	recordStageMetrics(s.name, err, time.Since(start))
+	return ComponentResult{Name: s.name, Applied: err == nil}, err
+}
+
 // runRuntimeComponents adapts the existing isolated components to ReconcileStep.
 // Existing stage ordering and short-circuit semantics remain unchanged.
-func runRuntimeComponents(ctx context.Context, c *bx.BitrixCluster, in *runtimeInputs, components []runtimeComponent) ([]ComponentResult, error) {
+func runRuntimeComponents(ctx context.Context, status *StatusManager, in *runtimeInputs, components []runtimeComponent) ([]ComponentResult, error) {
+	c := status.cluster
 	steps := make([]ReconcileStep, 0, len(components))
 	for _, component := range components {
 		steps = append(steps, ReconcileStep{
@@ -74,22 +102,23 @@ func runRuntimeComponents(ctx context.Context, c *bx.BitrixCluster, in *runtimeI
 			},
 		})
 	}
-	outcome, err := RunReconcileSteps(ctx, &StatusManager{cluster: c}, steps)
+	outcome, err := RunReconcileSteps(ctx, status, steps)
 	return outcome.Results, err
 }
 
-func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.BitrixCluster) error {
+func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, status *StatusManager) error {
+	c := status.cluster
 	var in *runtimeInputs
 	preparation, err := captureComponentResult("prepare", c, func(snapshot *bx.BitrixCluster) error {
 		var prepErr error
 		in, prepErr = r.prepareRuntime(ctx, snapshot)
 		return prepErr
 	})
-	(&StatusManager{cluster: c}).Apply(preparation)
+	status.Apply(preparation)
 	if err != nil {
 		return &componentError{name: "prepare", cause: err}
 	}
-	_, err = runRuntimeComponents(ctx, c, in, r.runtimeComponents())
+	_, err = runRuntimeComponents(ctx, status, in, r.runtimeComponents())
 	return err
 }
 
@@ -118,7 +147,7 @@ func (r *BitrixClusterReconciler) prepareRuntime(ctx context.Context, c *bx.Bitr
 	if err != nil {
 		return nil, err
 	}
-	pvc, err := r.storage(ctx, c)
+	pvc, err := r.resourceManager().Storage(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -135,13 +164,13 @@ func (r *BitrixClusterReconciler) prepareRuntime(ctx context.Context, c *bx.Bitr
 
 func (r *BitrixClusterReconciler) runtimeComponents() []runtimeComponent {
 	return []runtimeComponent{
-		componentStep{name: "config", run: r.reconcileRuntimeConfig},
+		applyOnlyStep{name: "config", run: r.reconcileRuntimeConfig},
 		componentStep{name: stagePush, run: r.reconcileRuntimePush},
-		componentStep{name: stageWeb, run: r.reconcileRuntimeWeb},
+		applyOnlyStep{name: stageWeb, run: r.reconcileRuntimeWeb},
 		componentStep{name: stageCron, run: r.reconcileRuntimeCron},
 		componentStep{name: stageWebStatus, run: r.observeRuntimeWeb},
 		componentStep{name: stageSites, run: r.reconcileRuntimeSites},
-		componentStep{name: "config-gc", run: r.reconcileRuntimeConfigGC},
+		applyOnlyStep{name: "config-gc", run: r.reconcileRuntimeConfigGC},
 	}
 }
 

@@ -30,14 +30,14 @@ func initializePushStatus(c *bx.BitrixCluster) {
 }
 
 func (r *BitrixClusterReconciler) reconcilePush(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision string) error {
-	if err := r.apply(ctx, c, workload.PushConfig(c, b)); err != nil {
+	if err := r.resourceManager().Apply(ctx, c, workload.PushConfig(c, b)); err != nil {
 		return err
 	}
 	ready := true
 	for _, role := range []string{pushPublisher, pushSubscriber} {
 		// Policies must exist before new Pods are started: /pub is a trusted backend API.
 		for _, obj := range []any{workload.PushPolicy(c, role), workload.PushService(c, role), workload.PushDeployment(c, b, revision, role)} {
-			if err := r.apply(ctx, c, obj); err != nil {
+			if err := r.resourceManager().Apply(ctx, c, obj); err != nil {
 				return err
 			}
 		}
@@ -92,7 +92,7 @@ func (r *BitrixClusterReconciler) deletePush(ctx context.Context, c *bx.BitrixCl
 }
 
 func (r *BitrixClusterReconciler) deletePushObject(ctx context.Context, c *bx.BitrixCluster, obj client.Object, foreground bool) (bool, error) {
-	found, err := r.deleteOwnedResource(ctx, c, obj, foreground)
+	found, err := r.resourceManager().DeleteOwned(ctx, c, obj, foreground)
 	if err != nil {
 		if collision, ok := errors.AsType[*blocked](err); ok {
 			condition(c, "PushReady", metav1.ConditionFalse, collision.reason, collision.message)

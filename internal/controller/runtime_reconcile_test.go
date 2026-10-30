@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -36,14 +37,14 @@ func TestRuntimeComponentsAreIndependentlyInjectable(t *testing.T) {
 		}}
 	}
 	components := []runtimeComponent{makeStep("storage", nil), makeStep("web", stop), makeStep("sites", nil)}
-	if _, err := runRuntimeComponents(context.Background(), &bx.BitrixCluster{}, &runtimeInputs{}, components); !errors.Is(err, stop) {
+	if _, err := runRuntimeComponents(context.Background(), &StatusManager{cluster: &bx.BitrixCluster{}}, &runtimeInputs{}, components); !errors.Is(err, stop) {
 		t.Fatalf("expected component failure, got %v", err)
 	}
 	if want := []string{"storage", "web"}; !slices.Equal(run, want) {
 		t.Fatalf("unexpected stages after failure: %v", run)
 	}
 	run = nil
-	if _, err := runRuntimeComponents(context.Background(), &bx.BitrixCluster{}, &runtimeInputs{}, components[:1]); err != nil {
+	if _, err := runRuntimeComponents(context.Background(), &StatusManager{cluster: &bx.BitrixCluster{}}, &runtimeInputs{}, components[:1]); err != nil {
 		t.Fatalf("isolated component failed: %v", err)
 	}
 	if !slices.Equal(run, []string{"storage"}) {
@@ -59,7 +60,7 @@ func TestRuntimeComponentsHonorCancellation(t *testing.T) {
 		called = true
 		return nil
 	}}
-	if _, err := runRuntimeComponents(ctx, &bx.BitrixCluster{}, &runtimeInputs{}, []runtimeComponent{c}); !errors.Is(err, context.Canceled) {
+	if _, err := runRuntimeComponents(ctx, &StatusManager{cluster: &bx.BitrixCluster{}}, &runtimeInputs{}, []runtimeComponent{c}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected cancellation, got %v", err)
 	}
 	if called {
@@ -82,7 +83,7 @@ func TestRuntimeComponentsAggregateResultsOnPartialFailure(t *testing.T) {
 			return failed
 		}},
 	}
-	results, err := runRuntimeComponents(context.Background(), c, &runtimeInputs{}, components)
+	results, err := runRuntimeComponents(context.Background(), &StatusManager{cluster: c}, &runtimeInputs{}, components)
 	if !errors.Is(err, failed) || !failedComponent(err, "config-gc") {
 		t.Fatalf("missing attributed GC failure: %v", err)
 	}
@@ -118,7 +119,7 @@ func TestComponentStepDoesNotMutateSharedStatus(t *testing.T) {
 	if meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") {
 		t.Fatal("component mutated caller's CR before aggregation")
 	}
-	applyComponentResult(c, observation)
+	(&StatusManager{cluster: c}).Apply(observation)
 	if !meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") {
 		t.Fatal("missing web readiness after aggregation")
 	}
@@ -148,8 +149,35 @@ func TestComponentAppliedStateIsDistinctFromObservedReadiness(t *testing.T) {
 	if !errors.Is(err, failure) || result.Applied {
 		t.Fatalf("partial apply must not be marked complete: %+v, %v", result, err)
 	}
-	applyComponentResult(c, result)
+	(&StatusManager{cluster: c}).Apply(result)
 	if !meta.IsStatusConditionTrue(c.Status.Conditions, "StorageReady") {
 		t.Fatal("an observation made before a failure was lost")
+	}
+}
+
+func TestApplyOnlyStepReportsDirectObservations(t *testing.T) {
+	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 5}}
+	initializeReconcileStatus(c)
+	before := c.Status.DeepCopy()
+	step := applyOnlyStep{name: "config", run: func(context.Context, *bx.BitrixCluster, *runtimeInputs) error {
+		return nil
+	}}
+	got, err := step.Reconcile(context.Background(), c, &runtimeInputs{})
+	if err != nil || !got.Applied || got.Name != "config" || !reflect.DeepEqual(c.Status, *before) {
+		t.Fatalf("pure step must only report Applied, got=%+v err=%v", got, err)
+	}
+}
+
+func TestApplyOnlyStepRejectsStatusMutation(t *testing.T) {
+	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 5}}
+	initializeReconcileStatus(c)
+	before := c.Status.DeepCopy()
+	step := applyOnlyStep{name: "web", run: func(_ context.Context, shared *bx.BitrixCluster, _ *runtimeInputs) error {
+		condition(shared, "WebReady", metav1.ConditionTrue, "Incorrect", "must not leak")
+		return nil
+	}}
+	got, err := step.Reconcile(context.Background(), c, &runtimeInputs{})
+	if err == nil || got.Applied || !reflect.DeepEqual(c.Status, *before) {
+		t.Fatalf("apply-only step changed shared status: got=%+v err=%v", got, err)
 	}
 }

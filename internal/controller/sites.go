@@ -267,7 +267,7 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 	job := &batchv1.Job{}
 	err = r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: name}, job)
 	if apierrors.IsNotFound(err) {
-		if err = r.apply(ctx, c, workload.SiteValidation(c, b, revision, image, release, php)); err != nil {
+		if err = r.resourceManager().Apply(ctx, c, workload.SiteValidation(c, b, revision, image, release, php)); err != nil {
 			return err
 		}
 		err = r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: name}, job)

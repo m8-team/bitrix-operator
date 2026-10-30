@@ -20,7 +20,7 @@ func (r *BitrixClusterReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 	status := NewStatusManager(r, cluster)
 	status.Begin()
-	resourceErr := r.reconcileResources(ctx, cluster)
+	resourceErr := r.reconcileResources(ctx, status)
 	// GC happens after the rollout, so a GC failure must not suppress
 	// otherwise valid publication or clear observed Gateway readiness.
 	runtimeValid := resourceErr == nil || failedComponent(resourceErr, "config-gc")

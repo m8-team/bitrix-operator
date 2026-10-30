@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
@@ -11,11 +10,8 @@ import (
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-const replicaHandoffManager = "bitrix-operator-replica-handoff"
 
 func validateAutoscaling(c *bx.BitrixCluster) error {
 	if !workload.AutoscalingEnabled(c) {
@@ -55,7 +51,7 @@ func validateAutoscaling(c *bx.BitrixCluster) error {
 // unrelated runtime configuration is invalid. Deletion uses UID/RV preconditions.
 func (r *BitrixClusterReconciler) deleteHPA(ctx context.Context, c *bx.BitrixCluster) error {
 	h := &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{Name: workload.Name(c, "web"), Namespace: c.Namespace}}
-	found, err := r.deleteOwnedResource(ctx, c, h, false)
+	found, err := r.resourceManager().DeleteOwned(ctx, c, h, false)
 	if err != nil {
 		return err
 	}
@@ -69,7 +65,7 @@ func (r *BitrixClusterReconciler) reconcileHPA(ctx context.Context, c *bx.Bitrix
 	if !workload.AutoscalingEnabled(c) {
 		return nil
 	}
-	if err := r.apply(ctx, c, workload.HPA(c)); err != nil {
+	if err := r.resourceManager().Apply(ctx, c, workload.HPA(c)); err != nil {
 		return err
 	}
 	h := &autoscalingv2.HorizontalPodAutoscaler{}
@@ -105,52 +101,4 @@ func webDesiredReplicas(c *bx.BitrixCluster, d *appsv1.Deployment) int32 {
 		return *d.Spec.Replicas
 	}
 	return c.Spec.Runtime.Web.Replicas
-}
-
-// Transfer a shared replica field to a temporary SSA manager before omission by
-// the regular operator manager. This avoids defaulting to 1. The HPA's first scale
-// update takes ownership away from the temporary manager. Never repeat after the
-// regular manager has relinquished the field, including after operator restarts.
-func (r *BitrixClusterReconciler) handoffReplicas(ctx context.Context, live *unstructured.Unstructured) error {
-	owns := false
-	for _, field := range live.GetManagedFields() {
-		if field.Manager != "bitrix-operator" || field.Subresource != "" || field.FieldsV1 == nil {
-			continue
-		}
-		var fields map[string]any
-		if err := json.Unmarshal(field.FieldsV1.GetRawBytes(), &fields); err != nil {
-			return err
-		}
-		if _, found, err := unstructured.NestedFieldNoCopy(fields, "f:spec", "f:replicas"); err != nil {
-			return err
-		} else if found {
-			owns = true
-		}
-	}
-	if !owns {
-		return nil
-	}
-	replicas, found, err := unstructured.NestedInt64(live.Object, "spec", "replicas")
-	if err != nil {
-		return err
-	}
-	if !found {
-		return fmt.Errorf("deployment replicas missing during handoff")
-	}
-	handoff := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "apps/v1", "kind": deploymentKind,
-		"metadata": map[string]any{"name": live.GetName(), "namespace": live.GetNamespace(), "resourceVersion": live.GetResourceVersion()},
-		"spec":     map[string]any{"replicas": replicas},
-	}}
-	if err = r.Apply(ctx, client.ApplyConfigurationFromUnstructured(handoff), client.FieldOwner(replicaHandoffManager)); err != nil {
-		return err
-	}
-	uid := live.GetUID()
-	if err = r.reader().Get(ctx, client.ObjectKeyFromObject(live), live); err != nil {
-		return err
-	}
-	if live.GetUID() != uid {
-		return block("ResourceCollision", "The Deployment was replaced during replica ownership handoff")
-	}
-	return nil
 }

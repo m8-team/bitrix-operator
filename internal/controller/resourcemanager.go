@@ -3,10 +3,12 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
+	"github.com/m8-team/bitrix-operator/internal/kubeops"
 	"github.com/m8-team/bitrix-operator/internal/workload"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -22,20 +24,20 @@ import (
 // Unlike the hash-based ClickHouse manager, it retains Bitrix SSA/UID/managedFields
 // safety guarantees and never adopts foreign resources.
 type ResourceManager struct {
-	client          client.Client
-	reader          client.Reader
-	handoffReplicas func(context.Context, *unstructured.Unstructured) error
+	client client.Client
+	reader client.Reader
 }
 
 func (r *BitrixClusterReconciler) resourceManager() ResourceManager {
 	return ResourceManager{
-		client:          r.Client,
-		reader:          r.reader(),
-		handoffReplicas: r.handoffReplicas,
+		client: r.Client,
+		reader: r.reader(),
 	}
 }
 
-// apply accepts only declaratively built configurations, never a serialized live object.
+const replicaHandoffManager = "bitrix-operator-replica-handoff"
+
+// Apply accepts only declaratively built configurations, never a serialized live object.
 // The create path and resourceVersion precondition prevent accidental adoption on races.
 func (rm ResourceManager) Apply(ctx context.Context, c *bx.BitrixCluster, configuration any) error {
 	data, err := json.Marshal(configuration)
@@ -140,4 +142,63 @@ func (rm ResourceManager) Storage(ctx context.Context, c *bx.BitrixCluster) (*co
 		}
 	}
 	return live, nil
+}
+
+// DeleteOwned guards deletion by the exact BitrixCluster controller UID.
+func (rm ResourceManager) DeleteOwned(ctx context.Context, c *bx.BitrixCluster, obj client.Object, foreground bool) (bool, error) {
+	found, err := kubeops.DeleteOwned(ctx, rm.reader, rm.client, obj, func(live client.Object) bool {
+		return controlledByCluster(c, live)
+	}, foreground)
+	if errors.Is(err, kubeops.ErrForeignResource) {
+		return found, block("ResourceCollision", "An application resource is not controlled by this BitrixCluster")
+	}
+	return found, err
+}
+
+// Transfer a shared replica field to a temporary SSA manager before omission by
+// the regular operator manager. This avoids defaulting to 1. The HPA's first scale
+// update takes ownership away from the temporary manager. Never repeat after the
+// regular manager has relinquished the field, including after operator restarts.
+func (rm ResourceManager) handoffReplicas(ctx context.Context, live *unstructured.Unstructured) error {
+	owns := false
+	for _, field := range live.GetManagedFields() {
+		if field.Manager != "bitrix-operator" || field.Subresource != "" || field.FieldsV1 == nil {
+			continue
+		}
+		var fields map[string]any
+		if err := json.Unmarshal(field.FieldsV1.GetRawBytes(), &fields); err != nil {
+			return err
+		}
+		if _, found, err := unstructured.NestedFieldNoCopy(fields, "f:spec", "f:replicas"); err != nil {
+			return err
+		} else if found {
+			owns = true
+		}
+	}
+	if !owns {
+		return nil
+	}
+	replicas, found, err := unstructured.NestedInt64(live.Object, "spec", "replicas")
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("deployment replicas missing during handoff")
+	}
+	handoff := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "apps/v1", "kind": deploymentKind,
+		"metadata": map[string]any{"name": live.GetName(), "namespace": live.GetNamespace(), "resourceVersion": live.GetResourceVersion()},
+		"spec":     map[string]any{"replicas": replicas},
+	}}
+	if err = rm.client.Apply(ctx, client.ApplyConfigurationFromUnstructured(handoff), client.FieldOwner(replicaHandoffManager)); err != nil {
+		return err
+	}
+	uid := live.GetUID()
+	if err = rm.reader.Get(ctx, client.ObjectKeyFromObject(live), live); err != nil {
+		return err
+	}
+	if live.GetUID() != uid {
+		return block("ResourceCollision", "The Deployment was replaced during replica ownership handoff")
+	}
+	return nil
 }

@@ -15,7 +15,7 @@ import (
 // Foreground deletion keeps web agent settings unchanged until the old workers have terminated.
 func (r *BitrixClusterReconciler) deleteCron(ctx context.Context, c *bx.BitrixCluster) error {
 	d := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: workload.Name(c, "cron"), Namespace: c.Namespace}}
-	found, err := r.deleteOwnedResource(ctx, c, d, true)
+	found, err := r.resourceManager().DeleteOwned(ctx, c, d, true)
 	if err != nil {
 		return err
 	}
@@ -26,7 +26,7 @@ func (r *BitrixClusterReconciler) deleteCron(ctx context.Context, c *bx.BitrixCl
 }
 
 func (r *BitrixClusterReconciler) reconcileCron(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision, image string, bound bool) error {
-	if err := r.apply(ctx, c, workload.Cron(c, b, revision, image)); err != nil {
+	if err := r.resourceManager().Apply(ctx, c, workload.Cron(c, b, revision, image)); err != nil {
 		return err
 	}
 	d := &appsv1.Deployment{}

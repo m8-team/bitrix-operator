@@ -66,26 +66,6 @@ func captureComponentResult(name string, cluster *bx.BitrixCluster, reconcile fu
 	return result, err
 }
 
-// applyComponentResult is the only way a runtime/publication stage changes the
-// accumulated status. Importantly, a stage cannot reset unrelated Conditions.
-func applyComponentResult(cluster *bx.BitrixCluster, result ComponentResult) {
-	for _, condition := range result.Conditions {
-		meta.SetStatusCondition(&cluster.Status.Conditions, condition)
-	}
-	if result.RuntimeChanged {
-		cluster.Status.Runtime = result.Runtime
-	}
-	if result.ReleaseChanged {
-		cluster.Status.Release = result.Release
-	}
-	if result.SitesChanged {
-		cluster.Status.Sites = result.Sites
-	}
-	if result.SiteValidationChanged {
-		cluster.Status.SiteValidation = result.SiteValidation
-	}
-}
-
 type componentError struct {
 	name  string
 	cause error
