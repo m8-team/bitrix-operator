@@ -1,38 +1,38 @@
 package controller
 
 import (
-"context"
-"encoding/json"
-"fmt"
-"slices"
+	"context"
+	"encoding/json"
+	"fmt"
+	"slices"
 
-bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
-"github.com/m8-team/bitrix-operator/internal/workload"
-corev1 "k8s.io/api/core/v1"
-storagev1 "k8s.io/api/storage/v1"
-apierrors "k8s.io/apimachinery/pkg/api/errors"
-"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-"k8s.io/apimachinery/pkg/types"
-"k8s.io/apimachinery/pkg/util/sets"
-"k8s.io/client-go/util/csaupgrade"
-"sigs.k8s.io/controller-runtime/pkg/client"
+	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
+	"github.com/m8-team/bitrix-operator/internal/workload"
+	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/util/csaupgrade"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // ResourceManager handles declarative Kubernetes writes and persistent storage.
 // Unlike the hash-based ClickHouse manager, it retains Bitrix SSA/UID/managedFields
 // safety guarantees and never adopts foreign resources.
 type ResourceManager struct {
-client client.Client
-reader client.Reader
-handoffReplicas func(context.Context, *unstructured.Unstructured) error
+	client          client.Client
+	reader          client.Reader
+	handoffReplicas func(context.Context, *unstructured.Unstructured) error
 }
 
 func (r *BitrixClusterReconciler) resourceManager() ResourceManager {
-return ResourceManager{
-client:r.Client,
-reader:r.reader(),
-handoffReplicas:r.handoffReplicas,
-}
+	return ResourceManager{
+		client:          r.Client,
+		reader:          r.reader(),
+		handoffReplicas: r.handoffReplicas,
+	}
 }
 
 // apply accepts only declaratively built configurations, never a serialized live object.
