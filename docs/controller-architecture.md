@@ -75,14 +75,12 @@ framework or global mutable state merely to add a runtime component.
 ## P1: component observations and error policy
 
 Every runtime stage implements `runtimeComponent.Reconcile(...)` and returns a
-`ComponentResult` plus an error. The current components run through
-`captureComponentResult`, which invokes the existing resource logic on a
-deep-copied BitrixCluster. Consequently, a stage **cannot mutate the shared
-BitrixCluster status**. The orchestrator applies only the reported Condition,
-runtime, release, and site deltas after each stage, including observations made
-before an error. This is a compatibility adapter for the internal components;
-future components can construct results directly without editing the original
-CR's status.
+`ComponentResult` plus an error. The ConfigMaps, Web apply and ConfigMap GC
+stages return results directly and reject any accidental shared status mutation.
+Statusful legacy stages still use `captureComponentResult` on an isolated
+BitrixCluster snapshot. The shared `StatusManager` applies only reported
+Condition, runtime, release and site deltas, including observations made before
+an error. Neither kind of stage writes the status subresource directly.
 
 `StatusReady` (the `Ready` Condition) and `Phase` represent overall health;
 component Conditions represent observed component health. A failure attributed
@@ -160,10 +158,9 @@ the `BitrixCluster` API or relaxing the existing safety invariants:
   managedFields migration, HPA replica handoff, and resourceVersion guards
   rather than copying ClickHouse's spec-hash/Update strategy.
 
-The existing `r.apply`/`r.storage` methods remain compatibility delegates,
-so component builders do not require a breaking rewrite. The new step API
-supports future independent observations without making the current
-reconciliation graph concurrent.
+Component implementations call ResourceManager directly for SSA, PVC and
+UID-guarded deletion. The new step API supports future independent observations
+without making the current reconciliation graph concurrent.
 
 ## Incremental adapter removal
 
