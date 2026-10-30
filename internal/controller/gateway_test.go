@@ -95,7 +95,7 @@ func (r gatewayReadFailure) Get(ctx context.Context, key client.ObjectKey, obj c
 	return r.Reader.Get(ctx, key, obj, opts...)
 }
 
-const replacementSiteID = replacementSiteID
+const replacementSiteID = "replacement"
 
 // Fail the creation of a newly desired route after an older owned route
 // already exists. ResourceManager creates with UID ownership checks before SSA.
