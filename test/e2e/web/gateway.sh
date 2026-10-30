@@ -71,6 +71,9 @@ done
 https_probe > /dev/null
 test "$(kubectl -n bitrix-web-test get deployment/mysql-web -o jsonpath='{.spec.template.metadata.annotations.bitrix\.m8\.team/secret-revision}')" = "$revision"
 test "$(kubectl -n bitrix-web-test get deployment/mysql-web -o jsonpath='{.metadata.generation}')" = "$generation"
+# A real Envoy HTTPS + PHP SITE_ID assertion is separate from API Conditions:
+# Programmed/Accepted alone cannot prove new-route traffic or app health.
+source test/e2e/web/gateway-handoff.sh
 echo 'Checking revoked permission withdraws publication'
 kubectl -n bitrix-web-test delete referencegrant/site-certificate
 kubectl -n bitrix-web-test wait bitrixcluster/mysql --for=jsonpath='{.status.conditions[?(@.type=="GatewayReady")].reason}'=ReferenceNotPermitted --timeout=120s
@@ -83,5 +86,5 @@ kubectl -n bitrix-web-test patch bitrixcluster/mysql --type=merge -p '{"spec":{"
 kubectl -n bitrix-web-test wait bitrixcluster/mysql --for=jsonpath='{.status.conditions[?(@.type=="GatewayReady")].reason}'=Disabled --timeout=120s
 assert_no_routes
 test "$(kubectl -n envoy-gateway-system get gateway/bitrix-e2e -o jsonpath='{.spec}')" = "$gateway_spec"
-echo 'Gateway E2E passed: absent CRDs, HTTP, HTTPS, cross-namespace permissions, TLS rotation and withdrawal'
+echo 'Gateway E2E passed: absent CRDs, HTTP, HTTPS, cross-namespace permissions, TLS rotation, route handoff and withdrawal'
 )
