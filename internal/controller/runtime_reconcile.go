@@ -169,7 +169,7 @@ func (r *BitrixClusterReconciler) prepareRuntime(ctx context.Context, c *bx.Bitr
 		result.SetCondition(c.Generation, "StorageReady", metav1.ConditionFalse, "VolumePending", "Waiting for the uploads PVC to bind")
 	}
 	return &runtimeInputs{
-		desired: runtimeDesiredState{bundle: bundle, revision: revision, image: image},
+		desired:  runtimeDesiredState{bundle: bundle, revision: revision, image: image},
 		observed: runtimeObservedState{storageBound: bound},
 	}, result, nil
 }
