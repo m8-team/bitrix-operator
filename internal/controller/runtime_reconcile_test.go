@@ -155,6 +155,58 @@ func TestComponentAppliedStateIsDistinctFromObservedReadiness(t *testing.T) {
 	}
 }
 
+// Direct statusful stages must report deltas, not mutate the shared CR.
+// Observations from earlier work are preserved even if a stage fails.
+func TestObservedStepPreservesPartialResult(t *testing.T) {
+	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 11}}
+	initializeReconcileStatus(c)
+	before := c.Status.DeepCopy()
+	failure := errors.New("a later Kubernetes API call failed")
+	step := observedStep{name: stagePush, run: func(_ context.Context, cluster *bx.BitrixCluster, _ *runtimeInputs) (ComponentResult, error) {
+		result := ComponentResult{}
+		result.SetCondition(cluster.Generation, conditionPushReady, metav1.ConditionFalse, "RolloutPending", "waiting for subscriber")
+		result.RuntimeFor(cluster.Status.Runtime).PushPublisher.ReadyReplicas = 1
+		return result, failure
+	}}
+	got, err := step.Reconcile(context.Background(), c, &runtimeInputs{})
+	if !errors.Is(err, failure) || got.Applied || got.Name != stagePush || !reflect.DeepEqual(c.Status, *before) {
+		t.Fatalf("direct observation isolation: result=%+v error=%v", got, err)
+	}
+	status := &StatusManager{cluster: c}
+	status.Apply(got)
+	if !meta.IsStatusConditionFalse(c.Status.Conditions, conditionPushReady) ||
+		c.Status.Runtime.PushPublisher.ReadyReplicas != 1 || c.Status.Runtime.Web != before.Runtime.Web {
+		t.Fatalf("partial observation lost or unrelated workload overwritten: %+v", c.Status)
+	}
+}
+
+func TestObservedStepRejectsSharedStatusMutation(t *testing.T) {
+	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 9}}
+	initializeReconcileStatus(c)
+	before := c.Status.DeepCopy()
+	step := observedStep{name: stageCron, run: func(_ context.Context, cluster *bx.BitrixCluster, _ *runtimeInputs) (ComponentResult, error) {
+		condition(cluster, conditionCronReady, metav1.ConditionTrue, "Incorrect", "must not change shared CR")
+		return ComponentResult{}, nil
+	}}
+	result, err := step.Reconcile(context.Background(), c, &runtimeInputs{})
+	if err == nil || result.Applied || !reflect.DeepEqual(c.Status, *before) {
+		t.Fatalf("direct observation bypassed StatusManager: %+v %v", result, err)
+	}
+}
+
+func TestResultRuntimeForMakesAnIndependentCopy(t *testing.T) {
+	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 1}}
+	initializeReconcileStatus(c)
+	c.Status.Runtime.Web.ReadyReplicas = 4
+	result := ComponentResult{}
+	result.RuntimeFor(c.Status.Runtime).Cron.ReadyReplicas = 1
+	result.RuntimeFor(c.Status.Runtime).PushPublisher.ReadyReplicas = 2
+	if c.Status.Runtime.Cron.ReadyReplicas != 0 || c.Status.Runtime.PushPublisher.ReadyReplicas != 0 ||
+		result.Runtime.Web.ReadyReplicas != 4 || result.Runtime.Cron.ReadyReplicas != 1 || result.Runtime.PushPublisher.ReadyReplicas != 2 {
+		t.Fatalf("result must preserve other workloads without mutating input: %+v %+v", c.Status.Runtime, result.Runtime)
+	}
+}
+
 func TestApplyOnlyStepReportsDirectObservations(t *testing.T) {
 	c := &bx.BitrixCluster{ObjectMeta: metav1.ObjectMeta{Generation: 5}}
 	initializeReconcileStatus(c)

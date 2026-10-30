@@ -88,6 +88,29 @@ func (s applyOnlyStep) Reconcile(ctx context.Context, c *bx.BitrixCluster, in *r
 	return ComponentResult{Name: s.name, Applied: err == nil}, err
 }
 
+// observedStep runs a statusful stage that constructs ComponentResult directly.
+// Guard against accidentally bypassing the StatusManager aggregation boundary.
+type observedStep struct {
+	name string
+	run  func(context.Context, *bx.BitrixCluster, *runtimeInputs) (ComponentResult, error)
+}
+
+func (s observedStep) Name() string { return s.name }
+
+func (s observedStep) Reconcile(ctx context.Context, c *bx.BitrixCluster, in *runtimeInputs) (ComponentResult, error) {
+	before := c.Status.DeepCopy()
+	start := time.Now()
+	observation, err := s.run(ctx, c, in)
+	if !reflect.DeepEqual(c.Status, *before) {
+		c.Status = *before
+		err = errors.Join(err, fmt.Errorf("observed stage %s mutated the shared BitrixCluster status", s.name))
+	}
+	recordStageMetrics(s.name, err, time.Since(start))
+	observation.Name = s.name
+	observation.Applied = err == nil
+	return observation, err
+}
+
 // runRuntimeComponents adapts the existing isolated components to ReconcileStep.
 // Existing stage ordering and short-circuit semantics remain unchanged.
 func runRuntimeComponents(ctx context.Context, status *StatusManager, in *runtimeInputs, components []runtimeComponent) ([]ComponentResult, error) {
@@ -165,10 +188,10 @@ func (r *BitrixClusterReconciler) prepareRuntime(ctx context.Context, c *bx.Bitr
 func (r *BitrixClusterReconciler) runtimeComponents() []runtimeComponent {
 	return []runtimeComponent{
 		applyOnlyStep{name: "config", run: r.reconcileRuntimeConfig},
-		componentStep{name: stagePush, run: r.reconcileRuntimePush},
+		observedStep{name: stagePush, run: r.reconcileRuntimePush},
 		applyOnlyStep{name: stageWeb, run: r.reconcileRuntimeWeb},
-		componentStep{name: stageCron, run: r.reconcileRuntimeCron},
-		componentStep{name: stageWebStatus, run: r.observeRuntimeWeb},
+		observedStep{name: stageCron, run: r.reconcileRuntimeCron},
+		observedStep{name: stageWebStatus, run: r.observeRuntimeWeb},
 		componentStep{name: stageSites, run: r.reconcileRuntimeSites},
 		applyOnlyStep{name: "config-gc", run: r.reconcileRuntimeConfigGC},
 	}

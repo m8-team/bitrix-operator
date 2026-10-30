@@ -178,3 +178,18 @@ continue to use the isolated `captureComponentResult` bridge until their
 Condition/runtime/site observations can be migrated individually with
 dedicated regression tests. This avoids weakening evidence-based readiness
 during the transition.
+
+## Direct rollout observations
+
+Cron, Push, Web Deployment observation and HPA now return scoped
+`ComponentResult` values directly. Stage conditions use
+`ComponentResult.SetCondition`, and `RuntimeFor` clones observed workload
+status before applying a single workload's update. In particular, a successfully
+observed Push publisher remains in the result if the subsequent subscriber
+operation fails. A failed HPA check cannot erase the separately observed Web
+rollout, and the stage runner reports the original underlying error.
+
+The `observedStep` adapter records metrics and checks that statusful stages
+never mutate the shared BitrixCluster status. The remaining snapshot bridge is
+limited to preparation, Sites and Gateway publication because these still
+include multi-field status and evidence transitions.
