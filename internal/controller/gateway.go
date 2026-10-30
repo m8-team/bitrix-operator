@@ -16,6 +16,7 @@ import (
 )
 
 const gatewayKind = "Gateway"
+const httpRouteKind gateway.Kind = "HTTPRoute"
 
 // Gateway failures affect publication only; existing internal workloads still reconcile.
 func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.BitrixCluster, runtimeValid bool) (ComponentResult, error) {
@@ -57,9 +58,9 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 	for _, route := range desired {
 		names = append(names, route.Name)
 	}
-	if err = r.pruneRoutes(ctx, c, names); err != nil {
-		return result, err
-	}
+	// Do not remove last-known-good routes until every desired route has
+	// been applied and read back successfully. A create/SSA/read failure
+	// must leave the old publication intact for the next retry.
 	ready := gatewayProgrammed(p)
 	for _, route := range desired {
 		if err = r.resourceManager().Apply(ctx, c, route); err != nil {
@@ -72,6 +73,12 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 		if !routeAccepted(live, p, c.Spec.Networking.Gateway.ParentRef) {
 			ready = false
 		}
+	}
+	// Only after all desired routes can be observed is it safe to
+	// prune obsolete owned routes. This retains deletion of removed
+	// hosts/sites even when the new Gateway rollout is still pending.
+	if err = r.pruneRoutes(ctx, c, names); err != nil {
+		return result, err
 	}
 	if !ready {
 		result.SetCondition(c.Generation, "GatewayReady", metav1.ConditionFalse, "RoutePending", "Waiting for current Gateway/listener and HTTPRoute Accepted/ResolvedRefs conditions")

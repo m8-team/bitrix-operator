@@ -96,7 +96,7 @@ func (r *BitrixClusterReconciler) allowedRoutes(ctx context.Context, c *bx.Bitri
 		if len(allowed.Kinds) > 0 {
 			found := false
 			for _, kind := range allowed.Kinds {
-				if kind.Kind == "HTTPRoute" && (kind.Group == nil || *kind.Group == gateway.Group(gateway.GroupName)) {
+				if kind.Kind == httpRouteKind && (kind.Group == nil || *kind.Group == gateway.Group(gateway.GroupName)) {
 					found = true
 				}
 			}
