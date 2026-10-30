@@ -102,4 +102,3 @@ func webDesiredReplicas(c *bx.BitrixCluster, d *appsv1.Deployment) int32 {
 	}
 	return c.Spec.Runtime.Web.Replicas
 }
-

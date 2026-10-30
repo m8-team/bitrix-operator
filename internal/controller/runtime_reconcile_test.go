@@ -119,7 +119,7 @@ func TestComponentStepDoesNotMutateSharedStatus(t *testing.T) {
 	if meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") {
 		t.Fatal("component mutated caller's CR before aggregation")
 	}
-	(&StatusManager{cluster: c}).Apply( observation)
+	(&StatusManager{cluster: c}).Apply(observation)
 	if !meta.IsStatusConditionTrue(c.Status.Conditions, "WebReady") {
 		t.Fatal("missing web readiness after aggregation")
 	}
@@ -149,7 +149,7 @@ func TestComponentAppliedStateIsDistinctFromObservedReadiness(t *testing.T) {
 	if !errors.Is(err, failure) || result.Applied {
 		t.Fatalf("partial apply must not be marked complete: %+v, %v", result, err)
 	}
-	(&StatusManager{cluster: c}).Apply( result)
+	(&StatusManager{cluster: c}).Apply(result)
 	if !meta.IsStatusConditionTrue(c.Status.Conditions, "StorageReady") {
 		t.Fatal("an observation made before a failure was lost")
 	}

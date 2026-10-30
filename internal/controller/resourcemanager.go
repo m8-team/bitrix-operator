@@ -2,8 +2,8 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -144,7 +144,7 @@ func (rm ResourceManager) Storage(ctx context.Context, c *bx.BitrixCluster) (*co
 	return live, nil
 }
 
- // DeleteOwned guards deletion by the exact BitrixCluster controller UID.
+// DeleteOwned guards deletion by the exact BitrixCluster controller UID.
 func (rm ResourceManager) DeleteOwned(ctx context.Context, c *bx.BitrixCluster, obj client.Object, foreground bool) (bool, error) {
 	found, err := kubeops.DeleteOwned(ctx, rm.reader, rm.client, obj, func(live client.Object) bool {
 		return controlledByCluster(c, live)
