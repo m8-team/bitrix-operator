@@ -74,10 +74,16 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 			ready = false
 		}
 	}
-	// Only after all desired routes can be observed is it safe to
-	// prune obsolete owned routes. This retains deletion of removed
-	// hosts/sites even when the new Gateway rollout is still pending.
-	if err = r.pruneRoutes(ctx, c, names); err != nil {
+	// Keep superseded routes serving the desired hostnames until the
+	// replacement HTTPRoutes and Gateway/listener report current readiness.
+	// Routes serving only removed hostnames can be deleted immediately.
+	var pendingHosts []gateway.Hostname
+	if !ready {
+		for _, route := range desired {
+			pendingHosts = append(pendingHosts, route.Spec.Hostnames...)
+		}
+	}
+	if err = r.pruneRoutes(ctx, c, names, pendingHosts...); err != nil {
 		return result, err
 	}
 	if !ready {
@@ -135,7 +141,11 @@ func desiredRoutes(c *bx.BitrixCluster) []*gateway.HTTPRoute {
 	return routes
 }
 
-func (r *BitrixClusterReconciler) pruneRoutes(ctx context.Context, c *bx.BitrixCluster, keep []string) error {
+// pruneRoutes deletes obsolete owned routes with UID/RV preconditions. When a
+// replacement is still pending, old routes overlapping pendingHosts are kept
+// as last-known-good publication; explicit deletion and invalid publication
+// pass no pendingHosts so they always withdraw the old routes.
+func (r *BitrixClusterReconciler) pruneRoutes(ctx context.Context, c *bx.BitrixCluster, keep []string, pendingHosts ...gateway.Hostname) error {
 	if !r.GatewayAPIAvailable {
 		return nil
 	}
@@ -148,12 +158,36 @@ func (r *BitrixClusterReconciler) pruneRoutes(ctx context.Context, c *bx.BitrixC
 		if !controlledByCluster(c, route) || slices.Contains(keep, route.Name) || !route.DeletionTimestamp.IsZero() {
 			continue
 		}
+		if routeOverlapsHostnames(route, pendingHosts) {
+			continue
+		}
 		uid, rv := route.UID, route.ResourceVersion
 		if err := client.IgnoreNotFound(r.Delete(ctx, route, client.Preconditions{UID: &uid, ResourceVersion: &rv})); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// routeOverlapsHostnames conservatively keeps a superseded route if it
+// could still serve a hostname that a pending replacement is meant to serve.
+// An empty hostname list on the old route means it could match any hostname.
+func routeOverlapsHostnames(old *gateway.HTTPRoute, pendingHosts []gateway.Hostname) bool {
+	if len(pendingHosts) == 0 {
+		return false
+	}
+	if len(old.Spec.Hostnames) == 0 {
+		return true
+	}
+	for _, previous := range old.Spec.Hostnames {
+		for _, next := range pendingHosts {
+			if listenerHostnameMatches(string(previous), string(next)) ||
+				listenerHostnameMatches(string(next), string(previous)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func currentConditions(conditions []metav1.Condition, generation int64, kinds ...string) bool {
