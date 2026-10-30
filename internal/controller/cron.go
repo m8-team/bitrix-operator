@@ -25,24 +25,25 @@ func (r *BitrixClusterReconciler) deleteCron(ctx context.Context, c *bx.BitrixCl
 	return nil
 }
 
-func (r *BitrixClusterReconciler) reconcileCron(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision, image string, bound bool) error {
+func (r *BitrixClusterReconciler) reconcileCron(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision, image string, bound bool) (ComponentResult, error) {
+	result := ComponentResult{}
 	if err := r.resourceManager().Apply(ctx, c, workload.Cron(c, b, revision, image)); err != nil {
-		return err
+		return result, err
 	}
 	d := &appsv1.Deployment{}
 	if err := r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "cron")}, d); err != nil {
-		condition(c, conditionCronReady, metav1.ConditionUnknown, "ObservationFailed", "Could not read the cron Deployment")
-		return err
+		result.SetCondition(c.Generation, conditionCronReady, metav1.ConditionUnknown, "ObservationFailed", "Could not read the cron Deployment")
+		return result, err
 	}
 	rollout := observeDeployment(d, 1)
-	c.Status.Runtime.Cron = rollout.status
+	result.RuntimeFor(c.Status.Runtime).Cron = rollout.status
 	if rollout.ready && bound {
-		condition(c, "CronReady", metav1.ConditionTrue, "RolloutComplete", "The desired cron replica is ready and uploads storage is bound")
+		result.SetCondition(c.Generation, conditionCronReady, metav1.ConditionTrue, "RolloutComplete", "The desired cron replica is ready and uploads storage is bound")
 	} else {
-		condition(c, conditionCronReady, metav1.ConditionFalse, "RolloutPending", "Waiting for the current cron Deployment and uploads storage")
+		result.SetCondition(c.Generation, conditionCronReady, metav1.ConditionFalse, "RolloutPending", "Waiting for the current cron Deployment and uploads storage")
 	}
 	if rollout.deadlineExceeded {
-		return block(progressDeadlineExceeded, "The cron Deployment exceeded its rollout deadline")
+		return result, block(progressDeadlineExceeded, "The cron Deployment exceeded its rollout deadline")
 	}
-	return nil
+	return result, nil
 }

@@ -32,6 +32,28 @@ type ComponentResult struct {
 	SiteValidationChanged bool
 }
 
+// SetCondition builds a stage-local observation; StatusManager alone merges
+// it into the accumulated CR status, with transition timestamps managed there.
+func (result *ComponentResult) SetCondition(generation int64, kind string, state metav1.ConditionStatus, reason, message string) {
+	meta.SetStatusCondition(&result.Conditions, metav1.Condition{
+		Type: kind, Status: state, Reason: reason, Message: message,
+		ObservedGeneration: generation,
+	})
+}
+
+// RuntimeFor returns a private copy of the previously observed workload state.
+// It prevents one stage from resetting other stages' replica observations.
+func (result *ComponentResult) RuntimeFor(previous *bx.RuntimeStatus) *bx.RuntimeStatus {
+	if !result.RuntimeChanged {
+		result.Runtime = &bx.RuntimeStatus{}
+		if previous != nil {
+			result.Runtime = previous.DeepCopy()
+		}
+		result.RuntimeChanged = true
+	}
+	return result.Runtime
+}
+
 // captureComponentResult isolates older component implementations that still
 // use condition(c, ...) internally. They can be migrated to construct results
 // directly without changing orchestration or their Kubernetes operations.

@@ -61,23 +61,21 @@ func (r *BitrixClusterReconciler) deleteHPA(ctx context.Context, c *bx.BitrixClu
 	return nil
 }
 
-func (r *BitrixClusterReconciler) reconcileHPA(ctx context.Context, c *bx.BitrixCluster) error {
+func (r *BitrixClusterReconciler) reconcileHPA(ctx context.Context, c *bx.BitrixCluster) (ComponentResult, error) {
+	result := ComponentResult{}
 	if !workload.AutoscalingEnabled(c) {
-		return nil
+		return result, nil
 	}
 	if err := r.resourceManager().Apply(ctx, c, workload.HPA(c)); err != nil {
-		return err
+		return result, err
 	}
 	h := &autoscalingv2.HorizontalPodAutoscaler{}
 	if err := r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "web")}, h); err != nil {
-		return err
+		return result, err
 	}
-	// HPA conditions do not have observedGeneration; honor the top-level value when
-	// provided. Kubernetes implementations may omit it, so this is observed health,
-	// not proof that a particular metric sample was collected after a spec edit.
 	if h.Status.ObservedGeneration != nil && *h.Status.ObservedGeneration < h.Generation {
-		condition(c, "AutoscalingReady", metav1.ConditionFalse, "AutoscalingPending", "Waiting for the HPA controller to observe the current configuration")
-		return nil
+		result.SetCondition(c.Generation, "AutoscalingReady", metav1.ConditionFalse, "AutoscalingPending", "Waiting for the HPA controller to observe the current configuration")
+		return result, nil
 	}
 	active, able := false, false
 	for _, cond := range h.Status.Conditions {
@@ -89,11 +87,11 @@ func (r *BitrixClusterReconciler) reconcileHPA(ctx context.Context, c *bx.Bitrix
 		}
 	}
 	if active && able {
-		condition(c, "AutoscalingReady", metav1.ConditionTrue, "AutoscalingActive", "The HPA reports available metrics and a scalable target")
+		result.SetCondition(c.Generation, "AutoscalingReady", metav1.ConditionTrue, "AutoscalingActive", "The HPA reports available metrics and a scalable target")
 	} else {
-		condition(c, "AutoscalingReady", metav1.ConditionFalse, "MetricsPending", "Waiting for the HPA to report ScalingActive and AbleToScale; check metrics-server and resource requests")
+		result.SetCondition(c.Generation, "AutoscalingReady", metav1.ConditionFalse, "MetricsPending", "Waiting for the HPA to report ScalingActive and AbleToScale; check metrics-server and resource requests")
 	}
-	return nil
+	return result, nil
 }
 
 func webDesiredReplicas(c *bx.BitrixCluster, d *appsv1.Deployment) int32 {

@@ -29,41 +29,45 @@ func initializePushStatus(c *bx.BitrixCluster) {
 	}
 }
 
-func (r *BitrixClusterReconciler) reconcilePush(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision string) error {
+func (r *BitrixClusterReconciler) reconcilePush(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision string) (ComponentResult, error) {
+	result := ComponentResult{}
 	if err := r.resourceManager().Apply(ctx, c, workload.PushConfig(c, b)); err != nil {
-		return err
+		return result, err
 	}
 	ready := true
 	for _, role := range []string{pushPublisher, pushSubscriber} {
-		// Policies must exist before new Pods are started: /pub is a trusted backend API.
+		// Apply NetworkPolicy and Service before launching the trusted Push backend.
 		for _, obj := range []any{workload.PushPolicy(c, role), workload.PushService(c, role), workload.PushDeployment(c, b, revision, role)} {
 			if err := r.resourceManager().Apply(ctx, c, obj); err != nil {
-				return err
+				return result, err
 			}
 		}
 		d := &appsv1.Deployment{}
 		if err := r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: workload.Name(c, "push-"+role)}, d); err != nil {
-			return err
+			return result, err
 		}
 		desired := c.Spec.Runtime.Push.Subscriber.Replicas
-		target := &c.Status.Runtime.PushSubscriber
 		if role == pushPublisher {
 			desired = c.Spec.Runtime.Push.Publisher.Replicas
-			target = &c.Status.Runtime.PushPublisher
 		}
 		rollout := observeDeployment(d, desired)
-		*target = rollout.status
+		// Partial observations survive a later role's Apply/Get error.
+		if role == pushPublisher {
+			result.RuntimeFor(c.Status.Runtime).PushPublisher = rollout.status
+		} else {
+			result.RuntimeFor(c.Status.Runtime).PushSubscriber = rollout.status
+		}
 		ready = ready && rollout.ready
 		if rollout.deadlineExceeded {
-			return block(progressDeadlineExceeded, "A Push Deployment exceeded its rollout deadline")
+			return result, block(progressDeadlineExceeded, "A Push Deployment exceeded its rollout deadline")
 		}
 	}
 	if ready {
-		condition(c, "PushReady", metav1.ConditionTrue, "RolloutComplete", "Both desired Push workloads are ready")
+		result.SetCondition(c.Generation, conditionPushReady, metav1.ConditionTrue, "RolloutComplete", "Both desired Push workloads are ready")
 	} else {
-		condition(c, conditionPushReady, metav1.ConditionFalse, "RolloutPending", "Waiting for both current Push Deployment rollouts")
+		result.SetCondition(c.Generation, conditionPushReady, metav1.ConditionFalse, "RolloutPending", "Waiting for both current Push Deployment rollouts")
 	}
-	return nil
+	return result, nil
 }
 
 // Cleanup precedes Secret/config validation and preserves ingress restrictions until Pods terminate.
