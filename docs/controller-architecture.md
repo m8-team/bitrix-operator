@@ -164,3 +164,20 @@ The existing `r.apply`/`r.storage` methods remain compatibility delegates,
 so component builders do not require a breaking rewrite. The new step API
 supports future independent observations without making the current
 reconciliation graph concurrent.
+
+## Incremental adapter removal
+
+StatusManager is passed through the entire runtime pipeline and is the only
+path used to aggregate stage observations. ResourceManager is called directly
+for Kubernetes apply, retained PVC storage and UID-guarded deletion. The old
+`r.apply`, `r.storage`, `r.deleteOwnedResource` and
+`applyComponentResult` wrappers are removed.
+
+The ConfigMaps, Web resource apply and ConfigMap GC stages now return
+`ComponentResult` directly through `applyOnlyStep`, preserving stage
+metrics and failing if they accidentally mutate the shared status. More
+complex stages (Push, Cron, Web observation, Sites, Gateway and preparation)
+continue to use the isolated `captureComponentResult` bridge until their
+Condition/runtime/site observations can be migrated individually with
+dedicated regression tests. This avoids weakening evidence-based readiness
+during the transition.

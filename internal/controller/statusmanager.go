@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,8 +31,24 @@ func (m *StatusManager) SetCondition(kind string, status metav1.ConditionStatus,
 	condition(m.cluster, kind, status, reason, message)
 }
 
+// Apply merges only the stage's reported fields; unrelated component health
+// remains untouched, even when another stage fails after partial observation.
 func (m *StatusManager) Apply(result ComponentResult) {
-	applyComponentResult(m.cluster, result)
+	for _, condition := range result.Conditions {
+		meta.SetStatusCondition(&m.cluster.Status.Conditions, condition)
+	}
+	if result.RuntimeChanged {
+		m.cluster.Status.Runtime = result.Runtime
+	}
+	if result.ReleaseChanged {
+		m.cluster.Status.Release = result.Release
+	}
+	if result.SitesChanged {
+		m.cluster.Status.Sites = result.Sites
+	}
+	if result.SiteValidationChanged {
+		m.cluster.Status.SiteValidation = result.SiteValidation
+	}
 }
 
 func (m *StatusManager) Resolve(resourceErr, publicationErr error) (ctrl.Result, error) {
