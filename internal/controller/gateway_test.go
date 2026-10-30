@@ -57,7 +57,7 @@ func readyConditions(generation int64, kinds ...string) []metav1.Condition {
 }
 func acceptGateway(g *gateway.Gateway) {
 	g.Status.Conditions = readyConditions(g.Generation, "Accepted", "Programmed")
-	g.Status.Listeners = []gateway.ListenerStatus{{Name: "web", SupportedKinds: []gateway.RouteGroupKind{{Kind: "HTTPRoute"}}, Conditions: readyConditions(g.Generation, "Accepted", "Programmed", "ResolvedRefs")}}
+	g.Status.Listeners = []gateway.ListenerStatus{{Name: "web", SupportedKinds: []gateway.RouteGroupKind{{Kind: httpRouteKind}}, Conditions: readyConditions(g.Generation, "Accepted", "Programmed", "ResolvedRefs")}}
 	Expect(k8sClient.Status().Update(ctx, g)).To(Succeed())
 }
 func siteRoute(c *bx.BitrixCluster) *gateway.HTTPRoute {
@@ -105,7 +105,7 @@ type failingRouteCreateClient struct {
 }
 
 func (f failingRouteCreateClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
-	if route, ok := obj.(*unstructured.Unstructured); ok && route.GetKind() == "HTTPRoute" && route.GetName() == f.name {
+	if route, ok := obj.(*unstructured.Unstructured); ok && route.GetKind() == string(httpRouteKind) && route.GetName() == f.name {
 		return errors.New("simulated HTTPRoute create failure")
 	}
 	return f.Client.Create(ctx, obj, opts...)

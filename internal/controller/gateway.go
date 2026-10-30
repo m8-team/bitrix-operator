@@ -16,6 +16,7 @@ import (
 )
 
 const gatewayKind = "Gateway"
+const httpRouteKind gateway.Kind = "HTTPRoute"
 
 // Gateway failures affect publication only; existing internal workloads still reconcile.
 func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.BitrixCluster, runtimeValid bool) (ComponentResult, error) {
