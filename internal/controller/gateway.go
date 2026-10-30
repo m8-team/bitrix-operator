@@ -104,9 +104,9 @@ func (r *BitrixClusterReconciler) reconcileGateway(ctx context.Context, c *bx.Bi
 // clearPublishedSiteURLs removes stale public URL evidence only after the
 // corresponding routes were successfully withdrawn. Transient Gateway
 // failures retain last-known-good routes and URLs.
-func clearPublishedSiteURLs(c *bx.BitrixCluster) {
-	for i := range c.Status.Sites {
-		sites[i].URLs = nil
+func clearPublishedSiteURLs(c *bx.BitrixCluster, result *ComponentResult) {
+	for i := range result.SitesFor(c.Status.Sites) {
+		result.Sites[i].URLs = nil
 	}
 }
 
