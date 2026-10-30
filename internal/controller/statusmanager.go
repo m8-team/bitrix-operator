@@ -38,16 +38,23 @@ func (m *StatusManager) Apply(result ComponentResult) {
 		meta.SetStatusCondition(&m.cluster.Status.Conditions, condition)
 	}
 	if result.RuntimeChanged {
-		m.cluster.Status.Runtime = result.Runtime
+		m.cluster.Status.Runtime = result.Runtime.DeepCopy()
 	}
 	if result.ReleaseChanged {
-		m.cluster.Status.Release = result.Release
+		m.cluster.Status.Release = result.Release.DeepCopy()
 	}
 	if result.SitesChanged {
-		m.cluster.Status.Sites = result.Sites
+		if result.Sites == nil {
+			m.cluster.Status.Sites = nil
+		} else {
+			m.cluster.Status.Sites = make([]bx.BitrixSiteStatus, len(result.Sites))
+			for i := range result.Sites {
+				m.cluster.Status.Sites[i] = *result.Sites[i].DeepCopy()
+			}
+		}
 	}
 	if result.SiteValidationChanged {
-		m.cluster.Status.SiteValidation = result.SiteValidation
+		m.cluster.Status.SiteValidation = result.SiteValidation.DeepCopy()
 	}
 }
 
