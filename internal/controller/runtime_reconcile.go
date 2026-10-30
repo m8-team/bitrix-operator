@@ -61,23 +61,21 @@ func (s componentStep) Reconcile(ctx context.Context, c *bx.BitrixCluster, in *r
 	})
 }
 
-// runRuntimeComponents gathers isolated observations and applies only their
-// explicit status deltas. A failed stage still contributes observations made
-// before its error; later stages cannot run against incomplete prerequisites.
+// runRuntimeComponents adapts the existing isolated components to ReconcileStep.
+// Existing stage ordering and short-circuit semantics remain unchanged.
 func runRuntimeComponents(ctx context.Context, c *bx.BitrixCluster, in *runtimeInputs, components []runtimeComponent) ([]ComponentResult, error) {
-	results := make([]ComponentResult, 0, len(components))
+	steps := make([]ReconcileStep, 0, len(components))
 	for _, component := range components {
-		if err := ctx.Err(); err != nil {
-			return results, err
-		}
-		result, err := component.Reconcile(ctx, c, in)
-		applyComponentResult(c, result)
-		results = append(results, result)
-		if err != nil {
-			return results, &componentError{name: component.Name(), cause: err}
-		}
+		steps = append(steps, ReconcileStep{
+			Name: component.Name(),
+			Run: func(ctx context.Context) (ComponentResult, StepResult, error) {
+				observation, err := component.Reconcile(ctx, c, in)
+				return observation, StepContinue(), err
+			},
+		})
 	}
-	return results, nil
+	outcome, err := RunReconcileSteps(ctx, &StatusManager{cluster: c}, steps)
+	return outcome.Results, err
 }
 
 func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.BitrixCluster) error {
@@ -87,7 +85,7 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, c *bx.
 		in, prepErr = r.prepareRuntime(ctx, snapshot)
 		return prepErr
 	})
-	applyComponentResult(c, preparation)
+	(&StatusManager{cluster: c}).Apply(preparation)
 	if err != nil {
 		return &componentError{name: "prepare", cause: err}
 	}

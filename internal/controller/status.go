@@ -1,10 +1,8 @@
 package controller
 
 import (
-	"context"
 	"errors"
 	"hash/fnv"
-	"reflect"
 	"time"
 
 	bx "github.com/m8-team/bitrix-operator/api/v1alpha1"
@@ -12,7 +10,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func condition(c *bx.BitrixCluster, kind string, status metav1.ConditionStatus, reason, message string) {
@@ -189,17 +186,4 @@ func preserveConditionTransitions(before, c *bx.BitrixCluster) {
 			c.Status.Conditions[i].LastTransitionTime = previous.LastTransitionTime
 		}
 	}
-}
-
-// Only this method writes the BitrixCluster status. Optimistic locking prevents
-// overwriting concurrent user or controller changes; events follow persistence.
-func (r *BitrixClusterReconciler) persistReconcileStatus(ctx context.Context, before, c *bx.BitrixCluster) error {
-	if reflect.DeepEqual(before.Status, c.Status) {
-		return nil
-	}
-	if err := r.Status().Patch(ctx, c, client.MergeFromWithOptions(before, client.MergeFromWithOptimisticLock{})); err != nil {
-		return err
-	}
-	r.recordTransition(before, c)
-	return nil
 }
