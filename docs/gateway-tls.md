@@ -47,6 +47,13 @@ TLS у сайта означает намерение использовать H
 Один BitrixCluster выбирает один listener; HTTP→HTTPS redirect, TLS passthrough,
 автовыпуск сертификатов и backend TLS в эту итерацию не входят.
 
+## Проект staged cutover
+
+Полная архитектура versioned web Deployment/Service, private preview,
+стабильного публичного HTTPRoute, фаз продвижения и rollback описана в
+[ADR-0001 — Staged Cutover Blue-Green](adr/0001-staged-cutover-blue-green.md).
+Это пока **проект**, а не реализованная опция CRD или гарантия zero-downtime.
+
 ## Проверки и готовность
 
 - Listener должен разрешать HTTPRoute и namespace приложения через `allowedRoutes`
