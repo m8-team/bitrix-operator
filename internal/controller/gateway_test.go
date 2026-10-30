@@ -30,7 +30,7 @@ import (
 )
 
 func gatewaySample(c *bx.BitrixCluster) *gateway.Gateway {
-	class := &gateway.GatewayClass{ObjectMeta: metav1.ObjectMeta{GenerateName: "fixture-"}, Spec: gateway.GatewayClassSpec{ControllerName: "example.com/test-controller"}}
+	class := &gateway.GatewayClass{ObjectMeta: metav1.ObjectMeta{GenerateName: "fixture-"}, Spec: gateway.GatewayClassSpec{ControllerName: testGatewayController}}
 	Expect(k8sClient.Create(ctx, class)).To(Succeed())
 	DeferCleanup(func() { Expect(k8sClient.Delete(ctx, class)).To(Succeed()) })
 	g := &gateway.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "edge", Namespace: c.Namespace}, Spec: gateway.GatewaySpec{GatewayClassName: gateway.ObjectName(class.Name), Listeners: []gateway.Listener{{Name: "web", Protocol: gateway.HTTPProtocolType, Port: 80}}}}
@@ -95,6 +95,7 @@ func (r gatewayReadFailure) Get(ctx context.Context, key client.ObjectKey, obj c
 	return r.Reader.Get(ctx, key, obj, opts...)
 }
 
+const testGatewayController = "example.com/test-controller"
 const replacementSiteID = "replacement"
 
 // Fail the creation of a newly desired route after an older owned route
@@ -128,7 +129,7 @@ func (f failingRouteObservationReader) Get(ctx context.Context, key client.Objec
 var _ = Describe("Gateway publication", func() {
 	It("preserves old routes if replacement creation fails, then prunes after retry", func() {
 		c := reconcileWeb(webSample())
-		gatewaySample(c)
+		g := gatewaySample(c)
 		reconcilePublished(c)
 		old := siteRoute(c)
 		// Replacing a site ID changes the generated route name. An API error
@@ -148,19 +149,40 @@ var _ = Describe("Gateway publication", func() {
 		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKey{
 			Namespace: c.Namespace, Name: nextName,
 		}, replacement))).To(BeTrue())
-		// A later successful retry completes replacement and only then removes
-		// the obsolete route, even though the Gateway is not yet Programmed.
+		// A later successful apply must not remove the old route before
+		// Gateway and the replacement HTTPRoute have current readiness.
 		healthy := &BitrixClusterReconciler{
 			Client: k8sClient, Scheme: k8sClient.Scheme(), GatewayAPIAvailable: true,
 		}
 		_, err = healthy.reconcileGateway(ctx, c, true)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: nextName}, replacement)).To(Succeed())
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(old), previous)).To(Succeed())
+		// The Gateway becomes Programmed before the replacement Route is accepted.
+		acceptGateway(g)
+		_, err = healthy.reconcileGateway(ctx, c, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(old), previous)).To(Succeed())
+		// Stale route conditions from a previous generation must not be enough.
+		replacement.Status.Parents = []gateway.RouteParentStatus{{
+			ParentRef: replacement.Spec.ParentRefs[0], ControllerName: testGatewayController,
+			Conditions: readyConditions(replacement.Generation, "Accepted", "ResolvedRefs"),
+		}}
+		replacement.Status.Parents[0].Conditions[0].ObservedGeneration = 0
+		Expect(k8sClient.Status().Update(ctx, replacement)).To(Succeed())
+		_, err = healthy.reconcileGateway(ctx, c, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(old), previous)).To(Succeed())
+		// Only a current accepted/resolved route permits pruning.
+		replacement.Status.Parents[0].Conditions = readyConditions(replacement.Generation, "Accepted", "ResolvedRefs")
+		Expect(k8sClient.Status().Update(ctx, replacement)).To(Succeed())
+		_, err = healthy.reconcileGateway(ctx, c, true)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(old), previous))).To(BeTrue())
 	})
 	It("keeps last-known-good routes if replacement observation fails after apply", func() {
 		c := reconcileWeb(webSample())
-		gatewaySample(c)
+		g := gatewaySample(c)
 		reconcilePublished(c)
 		old := siteRoute(c)
 		c.Spec.Sites[0].ID = replacementSiteID
@@ -180,6 +202,15 @@ var _ = Describe("Gateway publication", func() {
 		healthy := &BitrixClusterReconciler{
 			Client: k8sClient, Scheme: k8sClient.Scheme(), GatewayAPIAvailable: true,
 		}
+		_, err = healthy.reconcileGateway(ctx, c, true)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(old), previous)).To(Succeed())
+		acceptGateway(g)
+		newRoute.Status.Parents = []gateway.RouteParentStatus{{
+			ParentRef: newRoute.Spec.ParentRefs[0], ControllerName: testGatewayController,
+			Conditions: readyConditions(newRoute.Generation, "Accepted", "ResolvedRefs"),
+		}}
+		Expect(k8sClient.Status().Update(ctx, newRoute)).To(Succeed())
 		_, err = healthy.reconcileGateway(ctx, c, true)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(old), previous))).To(BeTrue())
@@ -233,7 +264,7 @@ var _ = Describe("Gateway publication", func() {
 		Expect(route.Spec.Hostnames).To(HaveLen(1))
 		Expect(route.Spec.Rules[0].BackendRefs[0].Name).To(Equal(gateway.ObjectName(workload.Name(c, "web"))))
 		acceptGateway(g)
-		route.Status.Parents = []gateway.RouteParentStatus{{ParentRef: route.Spec.ParentRefs[0], ControllerName: "example.com/test-controller", Conditions: readyConditions(route.Generation, "Accepted", "ResolvedRefs")}}
+		route.Status.Parents = []gateway.RouteParentStatus{{ParentRef: route.Spec.ParentRefs[0], ControllerName: testGatewayController, Conditions: readyConditions(route.Generation, "Accepted", "ResolvedRefs")}}
 		route.Status.Parents[0].Conditions[0].ObservedGeneration = 0
 		Expect(k8sClient.Status().Update(ctx, route)).To(Succeed())
 		reconcilePublished(c)

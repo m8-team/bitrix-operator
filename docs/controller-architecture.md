@@ -175,3 +175,29 @@ Site validation preserves bounded proof TTL, max staleness and refresh
 failure semantics. Gateway only withdraws routes after an explicit invalid
 publication decision; temporary API errors retain last-known-good routes.
 Neither controller mutates the shared status without `StatusManager`.
+
+### Gateway replacement readiness and pruning
+
+The operator applies all desired HTTPRoutes and reads them back before
+pruning. A superseded owned HTTPRoute whose hostname overlaps a desired
+hostname is retained until **all** desired routes report current
+`Accepted=True` and `ResolvedRefs=True`, and the Gateway and selected
+listener report current `Accepted=True` / `Programmed=True` (listener
+also `ResolvedRefs=True`). Stale `observedGeneration` never permits
+pruning. While waiting, `GatewayReady=False` with `RoutePending` and
+normal reconciliation/requeue continues. Owner UID and resourceVersion
+deletion guards remain in place.
+
+Routes serving only **removed** hostnames are pruned after the desired
+routes have been successfully applied and read, even while other routes
+are pending. Disabling Gateway or explicitly invalid publication still
+withdraws all owned routes after validation/cleanup; transport failures
+retain previous publication.
+
+This is a *control-plane handoff*, not an absolute zero-downtime
+guarantee: Gateway API `Programmed=True` indicates data-plane
+configuration is being delivered, but does not guarantee application
+health or instantaneous traffic readiness. Also, changes applied in
+place to an HTTPRoute with an unchanged name cannot retain its previous
+spec. A strict zero-downtime rollout would require additional data-plane
+probes and versioned route ownership, scoped to a separate design.
