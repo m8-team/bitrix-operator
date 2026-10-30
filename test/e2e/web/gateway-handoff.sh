@@ -59,7 +59,9 @@ handoff_start_sampler() {
 }
 handoff_assert_sampler() {
     if [ -f "$handoff_sampler_failure" ] || ! kill -0 "$handoff_sampler_pid" 2>/dev/null; then
-        cat "$handoff_sampler_failure" >&2 2>/dev/null || true
+        if [ -f "$handoff_sampler_failure" ]; then
+            cat "$handoff_sampler_failure" >&2
+        fi
         echo "Continuous HTTPS handoff sampler exited unexpectedly" >&2
         return 1
     fi
