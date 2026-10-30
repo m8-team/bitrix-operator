@@ -53,18 +53,6 @@ type runtimeComponent interface {
 	Reconcile(context.Context, *bx.BitrixCluster, *runtimeInputs) (ComponentResult, error)
 }
 
-type componentStep struct {
-	name string
-	run  func(context.Context, *bx.BitrixCluster, *runtimeInputs) error
-}
-
-func (s componentStep) Name() string { return s.name }
-func (s componentStep) Reconcile(ctx context.Context, c *bx.BitrixCluster, in *runtimeInputs) (ComponentResult, error) {
-	return captureComponentResult(s.name, c, func(snapshot *bx.BitrixCluster) error {
-		return s.run(ctx, snapshot, in)
-	})
-}
-
 // applyOnlyStep is for stages that only change Kubernetes resources. It emits
 // a ComponentResult directly, without capturing a deep copy of the whole CR.
 // An accidental status mutation is reverted rather than leaking around
@@ -131,12 +119,14 @@ func runRuntimeComponents(ctx context.Context, status *StatusManager, in *runtim
 
 func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, status *StatusManager) error {
 	c := status.cluster
-	var in *runtimeInputs
-	preparation, err := captureComponentResult("prepare", c, func(snapshot *bx.BitrixCluster) error {
-		var prepErr error
-		in, prepErr = r.prepareRuntime(ctx, snapshot)
-		return prepErr
-	})
+	before := c.Status.DeepCopy()
+	start := time.Now()
+	in, preparation, err := r.prepareRuntime(ctx, c)
+	if !reflect.DeepEqual(c.Status, *before) {
+		c.Status = *before
+		err = errors.Join(err, fmt.Errorf("preparation mutated shared BitrixCluster status"))
+	}
+	recordStageMetrics("prepare", err, time.Since(start))
 	status.Apply(preparation)
 	if err != nil {
 		return &componentError{name: "prepare", cause: err}
@@ -147,42 +137,46 @@ func (r *BitrixClusterReconciler) reconcileResources(ctx context.Context, status
 
 // Preparation deliberately handles disabling old controllers before examining
 // broken Secrets/configuration: this keeps cleanup and SSA transitions safe.
-func (r *BitrixClusterReconciler) prepareRuntime(ctx context.Context, c *bx.BitrixCluster) (*runtimeInputs, error) {
-	if err := r.deleteDisabledRuntime(ctx, c); err != nil {
-		return nil, err
+// Each completed cleanup contributes to a direct observation, even if a later
+// validation or Kubernetes API call fails.
+func (r *BitrixClusterReconciler) prepareRuntime(ctx context.Context, c *bx.BitrixCluster) (*runtimeInputs, ComponentResult, error) {
+	result := ComponentResult{Name: "prepare"}
+	if err := r.deleteDisabledRuntime(ctx, c, &result); err != nil {
+		return nil, result, err
 	}
 	if err := validateWorkload(c); err != nil {
-		return nil, err
+		return nil, result, err
 	}
 	port, err := r.publicationPort(ctx, c)
 	if err != nil {
-		return nil, err
+		return nil, result, err
 	}
 	bundle, err := render.RenderWithPort(c.Spec, port, workload.PushEndpoints(c))
 	if err != nil {
-		return nil, block("InvalidRuntimeConfiguration", err.Error())
+		return nil, result, block("InvalidRuntimeConfiguration", err.Error())
 	}
 	image, err := render.ReleaseReference(c.Spec.Release.Image)
 	if err != nil {
-		return nil, block("InvalidRelease", err.Error())
+		return nil, result, block("InvalidRelease", err.Error())
 	}
 	revision, err := r.secrets(ctx, c, bundle)
 	if err != nil {
-		return nil, err
+		return nil, result, err
 	}
 	pvc, err := r.resourceManager().Storage(ctx, c)
 	if err != nil {
-		return nil, err
+		return nil, result, err
 	}
 	bound := pvc.Status.Phase == corev1.ClaimBound
-	condition(c, "StorageReady", metav1.ConditionFalse, "VolumePending", "Waiting for the uploads PVC to bind")
 	if bound {
-		condition(c, "StorageReady", metav1.ConditionTrue, "VolumeBound", "Uploads PVC is bound")
+		result.SetCondition(c.Generation, "StorageReady", metav1.ConditionTrue, "VolumeBound", "Uploads PVC is bound")
+	} else {
+		result.SetCondition(c.Generation, "StorageReady", metav1.ConditionFalse, "VolumePending", "Waiting for the uploads PVC to bind")
 	}
 	return &runtimeInputs{
 		desired:  runtimeDesiredState{bundle: bundle, revision: revision, image: image},
 		observed: runtimeObservedState{storageBound: bound},
-	}, nil
+	}, result, nil
 }
 
 func (r *BitrixClusterReconciler) runtimeComponents() []runtimeComponent {
@@ -192,32 +186,32 @@ func (r *BitrixClusterReconciler) runtimeComponents() []runtimeComponent {
 		applyOnlyStep{name: stageWeb, run: r.reconcileRuntimeWeb},
 		observedStep{name: stageCron, run: r.reconcileRuntimeCron},
 		observedStep{name: stageWebStatus, run: r.observeRuntimeWeb},
-		componentStep{name: stageSites, run: r.reconcileRuntimeSites},
+		observedStep{name: stageSites, run: r.reconcileRuntimeSites},
 		applyOnlyStep{name: "config-gc", run: r.reconcileRuntimeConfigGC},
 	}
 }
 
-func (r *BitrixClusterReconciler) deleteDisabledRuntime(ctx context.Context, c *bx.BitrixCluster) error {
+func (r *BitrixClusterReconciler) deleteDisabledRuntime(ctx context.Context, c *bx.BitrixCluster, result *ComponentResult) error {
 	if !workload.AutoscalingEnabled(c) {
 		if err := r.deleteHPA(ctx, c); err != nil {
 			return err
 		}
-		condition(c, "AutoscalingReady", metav1.ConditionTrue, "Disabled", "Web autoscaling is disabled")
+		result.SetCondition(c.Generation, "AutoscalingReady", metav1.ConditionTrue, "Disabled", "Web autoscaling is disabled")
 	}
 	if !c.Spec.Runtime.Cron.Enabled {
 		if err := r.deleteCron(ctx, c); err != nil {
 			return err
 		}
-		c.Status.Runtime.Cron = bx.WorkloadStatus{}
-		condition(c, conditionCronReady, metav1.ConditionTrue, "Disabled", "Cron workload is disabled")
+		result.RuntimeFor(c.Status.Runtime).Cron = bx.WorkloadStatus{}
+		result.SetCondition(c.Generation, conditionCronReady, metav1.ConditionTrue, "Disabled", "Cron workload is disabled")
 	}
 	if !pushEnabled(c) {
-		if err := r.deletePush(ctx, c); err != nil {
+		if err := r.deletePush(ctx, c, result); err != nil {
 			return err
 		}
-		c.Status.Runtime.PushPublisher = bx.WorkloadStatus{}
-		c.Status.Runtime.PushSubscriber = bx.WorkloadStatus{}
-		condition(c, conditionPushReady, metav1.ConditionTrue, "Disabled", "Push workloads are disabled")
+		result.RuntimeFor(c.Status.Runtime).PushPublisher = bx.WorkloadStatus{}
+		result.RuntimeFor(c.Status.Runtime).PushSubscriber = bx.WorkloadStatus{}
+		result.SetCondition(c.Generation, conditionPushReady, metav1.ConditionTrue, "Disabled", "Push workloads are disabled")
 	}
 	return nil
 }

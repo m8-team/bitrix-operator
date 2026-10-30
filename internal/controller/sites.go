@@ -143,43 +143,45 @@ func (r *BitrixClusterReconciler) deleteValidationJob(ctx context.Context, j *ba
 	return client.IgnoreNotFound(r.Delete(ctx, j, client.PropagationPolicy(metav1.DeletePropagationForeground), client.Preconditions{UID: &uid, ResourceVersion: &rv}))
 }
 
-// clearSiteEvidence removes the apparent existence of sites when the current
-// release, configuration or ready web runtime has not been established.
-func clearSiteEvidence(c *bx.BitrixCluster) {
-	for i := range c.Status.Sites {
-		c.Status.Sites[i].Exists = false
-		c.Status.Sites[i].Message = "Site existence has not been confirmed for the current runtime"
+// Clear the evidence on the stage result, not on the shared cluster.
+func clearSiteEvidence(c *bx.BitrixCluster, observed *ComponentResult) {
+	for i := range observed.SitesFor(c.Status.Sites) {
+		observed.Sites[i].Exists = false
+		observed.Sites[i].Message = "Site existence has not been confirmed for the current runtime"
 	}
 }
 
-func siteProof(c *bx.BitrixCluster, identity string, now time.Time) *bx.SiteValidationStatus {
+func siteProof(c *bx.BitrixCluster, observed *ComponentResult, identity string, now time.Time) *bx.SiteValidationStatus {
 	proof := c.Status.SiteValidation
 	if proof == nil || proof.Identity != identity || proof.JobUID == "" ||
 		proof.ValidatedAt.IsZero() || proof.ValidatedAt.After(now.Add(time.Minute)) {
-		c.Status.SiteValidation = nil
+		observed.SiteValidationChanged = true
+		observed.SiteValidation = nil
 		return nil
 	}
 	return proof
 }
 
-// During an in-flight refresh the last verified result remains authoritative
-// until its bounded maximum age, unless a refresh has already failed. A failed
-// refresh must never be hidden by the previously successful result.
-func retainSiteEvidence(c *bx.BitrixCluster, proof *bx.SiteValidationStatus, now time.Time) {
-	current := meta.FindStatusCondition(c.Status.Conditions, conditionSitesValidated)
+// Successful proof remains authoritative during refresh until its bounded
+// maximum age, unless the current stage or a previous retry reports failure.
+func retainSiteEvidence(c *bx.BitrixCluster, observed *ComponentResult, proof *bx.SiteValidationStatus, now time.Time) {
+	current := meta.FindStatusCondition(observed.Conditions, conditionSitesValidated)
+	if current == nil {
+		current = meta.FindStatusCondition(c.Status.Conditions, conditionSitesValidated)
+	}
 	if proof == nil {
-		condition(c, conditionSitesValidated, metav1.ConditionUnknown, "ValidationPending", "Waiting for the current site validation Job")
+		observed.SetCondition(c.Generation, conditionSitesValidated, metav1.ConditionUnknown, "ValidationPending", "Waiting for the current site validation Job")
 		return
 	}
 	if !now.Before(proof.ValidatedAt.Add(siteValidationMaxStaleness)) {
-		clearSiteEvidence(c)
-		condition(c, conditionSitesValidated, metav1.ConditionUnknown, "ValidationStale", "The last successful site validation has expired; waiting for a fresh result")
+		clearSiteEvidence(c, observed)
+		observed.SetCondition(c.Generation, conditionSitesValidated, metav1.ConditionUnknown, "ValidationStale", "The last successful site validation has expired; waiting for a fresh result")
 		return
 	}
 	if current != nil && current.Status == metav1.ConditionFalse {
 		return
 	}
-	condition(c, conditionSitesValidated, metav1.ConditionTrue, sitesValidated, "Last successful site validation remains valid during background refresh")
+	observed.SetCondition(c.Generation, conditionSitesValidated, metav1.ConditionTrue, sitesValidated, "Last successful site validation remains valid during background refresh")
 }
 
 func siteValidationCompletedAt(job *batchv1.Job) metav1.Time {
@@ -211,47 +213,51 @@ func (r *BitrixClusterReconciler) removeOldSiteValidationJobs(ctx context.Contex
 	return false, nil
 }
 
-func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision, image string) error {
+func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.BitrixCluster, b *render.Bundle, revision, image string) (ComponentResult, error) {
+	result := ComponentResult{}
 	if !meta.IsStatusConditionTrue(c.Status.Conditions, conditionWebReady) {
-		c.Status.SiteValidation = nil
-		clearSiteEvidence(c)
-		condition(c, conditionSitesValidated, metav1.ConditionUnknown, "RuntimeUnresolved", "Waiting for a ready web runtime before site validation")
-		return nil
+		result.SiteValidation = nil
+		result.SiteValidationChanged = true
+		clearSiteEvidence(c, &result)
+		result.SetCondition(c.Generation, conditionSitesValidated, metav1.ConditionUnknown, "RuntimeUnresolved", "Waiting for a ready web runtime before site validation")
+		return result, nil
 	}
 	release, php, err := r.observedRuntimeDigests(ctx, c, b, revision, image)
 	if err != nil {
-		return err
+		return result, err
 	}
 	if release == "" || php == "" {
-		c.Status.SiteValidation = nil
-		clearSiteEvidence(c)
-		condition(c, conditionSitesValidated, metav1.ConditionUnknown, "RuntimeUnresolved", "Waiting for consistent release and PHP image digests in ready web Pods")
-		return nil
+		result.SiteValidation = nil
+		result.SiteValidationChanged = true
+		clearSiteEvidence(c, &result)
+		result.SetCondition(c.Generation, conditionSitesValidated, metav1.ConditionUnknown, "RuntimeUnresolved", "Waiting for consistent release and PHP image digests in ready web Pods")
+		return result, nil
 	}
-	c.Status.Release = &bx.ReleaseStatus{
+	result.Release = &bx.ReleaseStatus{
 		Repository: c.Spec.Release.Image.Repository,
 		Tag:        c.Spec.Release.Image.Tag,
 		Digest:     release,
 	}
+	result.ReleaseChanged = true
 	name := workload.SiteValidationName(c, b, revision, release, php)
 	now := time.Now()
-	proof := siteProof(c, name, now)
+	proof := siteProof(c, &result, name, now)
 	if proof == nil {
-		clearSiteEvidence(c)
-		condition(c, conditionSitesValidated, metav1.ConditionUnknown, "ValidationPending", "Waiting for the validation result of the current runtime")
+		clearSiteEvidence(c, &result)
+		result.SetCondition(c.Generation, conditionSitesValidated, metav1.ConditionUnknown, "ValidationPending", "Waiting for the validation result of the current runtime")
 	}
 	jobs := &batchv1.JobList{}
 	if err = r.reader().List(ctx, jobs, client.InNamespace(c.Namespace), client.MatchingLabels{workload.OwnerUID: string(c.UID), "app.kubernetes.io/name": "bitrix-sites"}); err != nil {
-		return err
+		return result, err
 	}
 	waiting, err := r.removeOldSiteValidationJobs(ctx, c, name, jobs)
 	if err != nil {
-		return err
+		return result, err
 	}
 	if waiting {
-		retainSiteEvidence(c, proof, now)
+		retainSiteEvidence(c, &result, proof, now)
 		// Do not overlap attempts for different runtime identities.
-		return nil
+		return result, nil
 	}
 	requested := make([]string, 0, len(c.Spec.Sites))
 	for _, s := range c.Spec.Sites {
@@ -260,86 +266,88 @@ func (r *BitrixClusterReconciler) reconcileSites(ctx context.Context, c *bx.Bitr
 	identity := render.ValidationIdentity{ClusterUID: string(c.UID), Generation: c.Generation, Release: release, PHP: php, Attempt: "00000000-0000-0000-0000-000000000000"}
 	encoded, _ := json.Marshal(render.SiteResult{Version: render.ContractVersion, Identity: identity, Sites: requested, Reason: sitesValidated})
 	if len(encoded) > 4096 {
-		condition(c, conditionSitesValidated, metav1.ConditionFalse, "ResultTooLarge", "Requested site IDs exceed the bounded validation result capacity")
-		return nil
+		result.SetCondition(c.Generation, conditionSitesValidated, metav1.ConditionFalse, "ResultTooLarge", "Requested site IDs exceed the bounded validation result capacity")
+		return result, nil
 	}
 
 	job := &batchv1.Job{}
 	err = r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: name}, job)
 	if apierrors.IsNotFound(err) {
 		if err = r.resourceManager().Apply(ctx, c, workload.SiteValidation(c, b, revision, image, release, php)); err != nil {
-			return err
+			return result, err
 		}
 		err = r.reader().Get(ctx, client.ObjectKey{Namespace: c.Namespace, Name: name}, job)
 	}
 	if err != nil {
-		return err
+		return result, err
 	}
 	if !controlledJob(c, job) {
-		return block("ResourceCollision", "Site validation Job is not controlled by this cluster")
+		return result, block("ResourceCollision", "Site validation Job is not controlled by this cluster")
 	}
 	if !job.DeletionTimestamp.IsZero() {
-		retainSiteEvidence(c, proof, now)
-		return nil
+		retainSiteEvidence(c, &result, proof, now)
+		return result, nil
 	}
 	if proof != nil && string(job.UID) == proof.JobUID {
 		if now.Sub(proof.ValidatedAt.Time) < siteValidationTTL {
 			// The status proof survives loss of the completed Pod and manager restarts.
 			// Only the controller can write the status subresource.
-			condition(c, conditionSitesValidated, metav1.ConditionTrue, sitesValidated, "All requested site IDs exist in the Bitrix kernel")
-			return nil
+			result.SetCondition(c.Generation, conditionSitesValidated, metav1.ConditionTrue, sitesValidated, "All requested site IDs exist in the Bitrix kernel")
+			return result, nil
 		}
 		// Force the current runtime to be revalidated after TTL. A foreground
 		// replacement never briefly invalidates an otherwise healthy CR.
 		if err = r.deleteValidationJob(ctx, job); err != nil {
-			return err
+			return result, err
 		}
-		retainSiteEvidence(c, proof, now)
-		return nil
+		retainSiteEvidence(c, &result, proof, now)
+		return result, nil
 	}
 
 	identity.Attempt = string(job.UID)
-	result, complete, err := r.siteResult(ctx, c, job, identity, requested)
+	validationResult, complete, err := r.siteResult(ctx, c, job, identity, requested)
 	if err != nil {
-		return err
+		return result, err
 	}
 	if !complete {
-		retainSiteEvidence(c, proof, now)
-		return nil
+		retainSiteEvidence(c, &result, proof, now)
+		return result, nil
 	}
 	// Keep failed Jobs for five minutes, including failed refresh attempts,
 	// so a transient DB/Bitrix failure is retried without reconciling in a loop.
 	completedAt := siteValidationCompletedAt(job)
-	retryExpired := result.Reason != sitesValidated && time.Since(completedAt.Time) >= 5*time.Minute
+	retryExpired := validationResult.Reason != sitesValidated && time.Since(completedAt.Time) >= 5*time.Minute
 	status := metav1.ConditionFalse
 	message := "The Bitrix kernel could not validate the requested sites; retrying within five minutes"
-	if result.Reason == sitesValidated {
+	if validationResult.Reason == sitesValidated {
 		status = metav1.ConditionTrue
 		message = "All requested site IDs exist in the Bitrix kernel"
-		c.Status.SiteValidation = &bx.SiteValidationStatus{
+		result.SiteValidation = &bx.SiteValidationStatus{
 			Identity:    name,
 			JobUID:      string(job.UID),
 			ValidatedAt: completedAt,
 		}
+		result.SiteValidationChanged = true
 	}
-	if result.Reason == "SiteNotFound" {
+	if validationResult.Reason == "SiteNotFound" {
 		message = "One or more requested site IDs do not exist in the Bitrix kernel"
 	}
-	condition(c, conditionSitesValidated, status, result.Reason, message)
-	for i := range c.Status.Sites {
-		site := &c.Status.Sites[i]
-		site.Exists = slices.Contains(result.Sites, site.ID)
+	result.SetCondition(c.Generation, conditionSitesValidated, status, validationResult.Reason, message)
+	for i := range result.SitesFor(c.Status.Sites) {
+		site := &result.Sites[i]
+		site.Exists = slices.Contains(validationResult.Sites, site.ID)
 		site.Message = "Site existence could not be confirmed"
 		if site.Exists {
 			site.Message = "Site ID exists in the Bitrix kernel"
-		} else if result.Reason == "SiteNotFound" {
+		} else if validationResult.Reason == "SiteNotFound" {
 			site.Message = "Site ID does not exist in the Bitrix kernel"
 		}
 	}
 	if retryExpired {
-		return r.deleteValidationJob(ctx, job)
+		err := r.deleteValidationJob(ctx, job)
+		return result, err
 	}
-	return nil
+	return result, nil
 }
 
 func (r *BitrixClusterReconciler) siteResult(ctx context.Context, c *bx.BitrixCluster, job *batchv1.Job, identity render.ValidationIdentity, requested []string) (render.SiteResult, bool, error) {
