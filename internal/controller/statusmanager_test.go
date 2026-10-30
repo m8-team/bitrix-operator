@@ -45,15 +45,15 @@ func TestStatusManagerOwnsStatusPersistence(t *testing.T) {
 func TestStatusManagerApplyDetachesComponentObservation(t *testing.T) {
 	cluster := &bx.BitrixCluster{}
 	result := ComponentResult{
-		Name: "sites",
-		RuntimeChanged: true,
-		Runtime: &bx.RuntimeStatus{Web: bx.WorkloadStatus{ReadyReplicas: 3}},
-		ReleaseChanged: true,
-		Release: &bx.ReleaseStatus{Digest: "sha256:original"},
-		SitesChanged: true,
-		Sites: []bx.BitrixSiteStatus{{ID: "store", URLs: []string{"https://store.example.test"}, Exists: true}},
+		Name:                  "sites",
+		RuntimeChanged:        true,
+		Runtime:               &bx.RuntimeStatus{Web: bx.WorkloadStatus{ReadyReplicas: 3}},
+		ReleaseChanged:        true,
+		Release:               &bx.ReleaseStatus{Digest: "sha256:original"},
+		SitesChanged:          true,
+		Sites:                 []bx.BitrixSiteStatus{{ID: "store", URLs: []string{"https://store.example.test"}, Exists: true}},
 		SiteValidationChanged: true,
-		SiteValidation: &bx.SiteValidationStatus{Identity: "observed-release"},
+		SiteValidation:        &bx.SiteValidationStatus{Identity: "observed-release"},
 	}
 	(&StatusManager{cluster: cluster}).Apply(result)
 	result.Runtime.Web.ReadyReplicas = 0
