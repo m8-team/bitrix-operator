@@ -33,7 +33,7 @@ func scaleWeb(c *bx.BitrixCluster, n int32) {
 	scale := &autoscalingv1.Scale{}
 	Expect(k8sClient.SubResource("scale").Get(ctx, d, scale)).To(Succeed())
 	scale.Spec.Replicas = n
-	Expect(k8sClient.SubResource("scale").Update(ctx, d, &client.SubResourceUpdateOptions{SubResourceBody: scale, UpdateOptions: client.UpdateOptions{FieldManager: "test-autoscaler"}})).To(Succeed())
+	Expect(k8sClient.SubResource("scale").Update(ctx, d, &client.SubResourceUpdateOptions{SubResourceBody: scale, FieldManager: "test-autoscaler"})).To(Succeed())
 }
 func managerOwnsReplicas(c *bx.BitrixCluster, manager string) bool {
 	for _, f := range webDeployment(c).ManagedFields {

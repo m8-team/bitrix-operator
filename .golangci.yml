@@ -42,6 +42,9 @@ linters:
     modernize:
       disable:
         - omitzero
+        # Go 1.27's promoted embedded-field literal style is optional;
+        # defer repository-wide formatting to a dedicated change.
+        - embedlit
   exclusions:
     generated: lax
     rules:

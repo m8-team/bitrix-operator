@@ -74,7 +74,7 @@ func (r *BitrixClusterReconciler) reconcilePush(ctx context.Context, c *bx.Bitri
 func (r *BitrixClusterReconciler) deletePush(ctx context.Context, c *bx.BitrixCluster, result *ComponentResult) error {
 	pending := false
 	for _, role := range []string{pushPublisher, pushSubscriber} {
-		d := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: workload.Name(c, "push-"+role), Namespace: c.Namespace}}
+		d := &appsv1.Deployment{Name: workload.Name(c, "push-"+role), Namespace: c.Namespace}
 		found, err := r.deletePushObject(ctx, c, d, true, result)
 		if err != nil {
 			return err
