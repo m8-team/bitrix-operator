@@ -14,7 +14,7 @@ import (
 // Disable is independent of current Secrets/storage validity and never deletes a foreign object.
 // Foreground deletion keeps web agent settings unchanged until the old workers have terminated.
 func (r *BitrixClusterReconciler) deleteCron(ctx context.Context, c *bx.BitrixCluster) error {
-	d := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: workload.Name(c, "cron"), Namespace: c.Namespace}}
+	d := &appsv1.Deployment{Name: workload.Name(c, "cron"), Namespace: c.Namespace}
 	found, err := r.resourceManager().DeleteOwned(ctx, c, d, true)
 	if err != nil {
 		return err
