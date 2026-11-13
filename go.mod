@@ -3,7 +3,7 @@ module github.com/m8-team/bitrix-operator
 go 1.27.3
 
 require (
-	github.com/onsi/ginkgo/v2 v2.33.1
+	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.40.0
 	github.com/prometheus/client_golang v1.24.0
 	k8s.io/api v0.37.2
