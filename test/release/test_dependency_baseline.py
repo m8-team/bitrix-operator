@@ -23,13 +23,13 @@ class DependencySecurityBaselineTest(unittest.TestCase):
         self.assertGreaterEqual(version, (1, 26, 9))
         self.assertEqual(version, tuple(map(int, builder_go.groups()[:3])))
 
-    def test_x_net_at_least_0_61_0(self):
+    def test_x_net_at_least_0_62_0(self):
         go_mod = (ROOT / "go.mod").read_text()
         dependency = re.search(
             r"(?m)^\s*golang\.org/x/net v(\d+)\.(\d+)\.(\d+)\b", go_mod
         )
         self.assertIsNotNone(dependency)
-        self.assertGreaterEqual(tuple(map(int, dependency.groups())), (0, 61, 0))
+        self.assertGreaterEqual(tuple(map(int, dependency.groups())), (0, 62, 0))
 
 
 if __name__ == "__main__":
