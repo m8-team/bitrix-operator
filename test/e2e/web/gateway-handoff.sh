@@ -82,24 +82,24 @@ handoff_start_sampler
 # deterministic HTTPRoute name while retaining the same public hostname.
 # Old/new routes may coexist: a successful probe alone can reach the OLD route
 # because Gateway API prioritizes older equal-precedence route matches.
-kubectl -n bitrix-web-test patch bitrixcluster/mysql --type=json \
+kubectl -n bitrix-web-test patch bitrixcluster/cron --type=json \
     -p '[{"op":"replace","path":"/spec/sites/0/id","value":"s2"}]'
 wait_publication
 kubectl -n bitrix-web-test wait "httproute/$initial_route" --for=delete --timeout=120s
 new_route=$(handoff_route_name)
 test "$new_route" != "$initial_route"
 handoff_assert_only_route "$new_route"
-test "$(kubectl -n bitrix-web-test get bitrixcluster/mysql -o jsonpath='{.status.sites[0].id}')" = s2
+test "$(kubectl -n bitrix-web-test get bitrixcluster/cron -o jsonpath='{.status.sites[0].id}')" = s2
 handoff_expect_site s2
 handoff_assert_sampler
 # A second change exercises the reverse handoff and verifies that URL identity
 # returns to s1 only after its replacement route becomes the sole owned route.
-kubectl -n bitrix-web-test patch bitrixcluster/mysql --type=json \
+kubectl -n bitrix-web-test patch bitrixcluster/cron --type=json \
     -p '[{"op":"replace","path":"/spec/sites/0/id","value":"s1"}]'
 wait_publication
 kubectl -n bitrix-web-test wait "httproute/$new_route" --for=delete --timeout=120s
 handoff_assert_only_route "$initial_route"
-test "$(kubectl -n bitrix-web-test get bitrixcluster/mysql -o jsonpath='{.status.sites[0].id}')" = s1
+test "$(kubectl -n bitrix-web-test get bitrixcluster/cron -o jsonpath='{.status.sites[0].id}')" = s1
 handoff_expect_site s1
 handoff_stop_sampler
 echo "HTTPS handoff sampler passed: $(wc -c < "$handoff_sampler_samples") requests without observed failures"
