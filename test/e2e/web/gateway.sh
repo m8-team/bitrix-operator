@@ -27,6 +27,13 @@ certificate() {
         -keyout "$tmp_gateway/key.pem" -out "$tmp_gateway/cert.pem" 2>/dev/null
     kubectl -n bitrix-web-test create secret tls site-tls --cert="$tmp_gateway/cert.pem" --key="$tmp_gateway/key.pem" --dry-run=client -o yaml | kubectl apply -f -
 }
+# Continuous HTTPS handoff requires a rollout that keeps serving endpoints.
+# RWO web workloads intentionally use Recreate and may have a replacement gap;
+# the existing RWO lifecycle tests cover that supported behavior separately.
+test "$(kubectl -n bitrix-web-test get deployment/mysql-web -o jsonpath='{.spec.strategy.type}')" = Recreate
+test "$(kubectl -n bitrix-web-test get deployment/cron-web -o jsonpath='{.spec.strategy.type}')" = RollingUpdate
+test "$(kubectl -n bitrix-web-test get deployment/cron-web -o jsonpath='{.spec.strategy.rollingUpdate.maxUnavailable}')" = 0
+test "$(kubectl -n bitrix-web-test get deployment/cron-web -o jsonpath='{.status.availableReplicas}')" -ge 1
 echo 'Checking optional Gateway APIs and late installation'
 kubectl -n bitrix-web-test patch bitrixcluster/cron --type=merge -p '{"spec":{"networking":{"gateway":{"enabled":true,"parentRef":{"name":"bitrix-e2e","namespace":"envoy-gateway-system","sectionName":"web"}}}}}'
 kubectl -n bitrix-web-test wait bitrixcluster/cron --for=jsonpath='{.status.conditions[?(@.type=="GatewayReady")].reason}'=DependencyMissing --timeout=120s
