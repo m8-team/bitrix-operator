@@ -109,7 +109,7 @@ func pvcRequest(_ context.Context, obj client.Object) []ctrl.Request {
 	if name == "" {
 		return nil
 	}
-	return []ctrl.Request{{NamespacedName: client.ObjectKey{Namespace: obj.GetNamespace(), Name: name}}}
+	return []ctrl.Request{{Namespace: obj.GetNamespace(), Name: name}}
 }
 
 // SetupWithManager uses metadata-only Secret watches, keeping credential data out of the shared cache.
