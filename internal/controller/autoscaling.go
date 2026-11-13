@@ -50,7 +50,7 @@ func validateAutoscaling(c *bx.BitrixCluster) error {
 // HPA must be fully gone before returning replicas to the operator, including when
 // unrelated runtime configuration is invalid. Deletion uses UID/RV preconditions.
 func (r *BitrixClusterReconciler) deleteHPA(ctx context.Context, c *bx.BitrixCluster) error {
-	h := &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{Name: workload.Name(c, "web"), Namespace: c.Namespace}}
+	h := &autoscalingv2.HorizontalPodAutoscaler{Name: workload.Name(c, "web"), Namespace: c.Namespace}
 	found, err := r.resourceManager().DeleteOwned(ctx, c, h, false)
 	if err != nil {
 		return err
