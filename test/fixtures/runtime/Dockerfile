@@ -1,5 +1,5 @@
 # Build from repository root: docker build -f test/fixtures/runtime/Dockerfile -t bitrix-runtime-fixture .
-FROM quay.io/bitrix24/php:8.5.12-fpm-v1-alpine@sha256:e0f4ef993f5816a446ada5fbc5145b2eb3ef2c79e5590be2a02c1928fce97c4d
+FROM quay.io/bitrix24/php:8.5.13-fpm-v1-alpine@sha256:4c62006122c4e3277505a6ad7f7736d3fd6dbe8f15da1f036e6073d35337cd55
 USER root
 COPY test/fixtures/runtime/ /opt/www/
 COPY internal/runtime/templates/bitrix/ /tmp/operator-templates/
